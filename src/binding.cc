@@ -14,6 +14,7 @@
 #include "src/interfaces/media_stream.h"
 #include "src/interfaces/media_stream_track.h"
 #include "src/interfaces/rtc_audio_sink.h"
+#include "src/audio_opus_sink_wrapper.h"
 #include "src/interfaces/rtc_audio_source.h"
 #include "src/interfaces/rtc_data_channel.h"
 #include "src/interfaces/rtc_dtls_transport.h"
