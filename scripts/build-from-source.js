@@ -12,8 +12,11 @@ if (process.env.DEBUG) {
 
 if (process.platform === 'win32') {
   args.push('-g');
+  // args.push('"Visual Studio 17 2022"');
+  // args.push('-A');
+  // args.push('x64');
   args.push(process.arch === 'x64'
-    ? '"Visual Studio 15 2017 Win64"'
+    ? '"Visual Studio 15 2017"' // Visual Studio 15 2017 Win64
     : '"Visual Studio 15 2017"');
 }
 

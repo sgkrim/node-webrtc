@@ -9,12 +9,12 @@
   ],
   "version": "0.4.7",
   "author": "Alan K <ack@modeswitch.org> (http://blog.modeswitch.org)",
-  "homepage": "https://github.com/node-webrtc/node-webrtc",
-  "bugs": "https://github.com/node-webrtc/node-webrtc/issues",
+  "homepage": "https://github.com/sgkrim/node-webrtc",
+  "bugs": "https://github.com/sgkrim/node-webrtc/issues",
   "license": "BSD-2-Clause",
   "repository": {
     "type": "git",
-    "url": "http://github.com/node-webrtc/node-webrtc.git"
+    "url": "https://github.com/sgkrim/node-webrtc.git"
   },
   "main": "lib/index.js",
   "browser": "lib/browser.js",
