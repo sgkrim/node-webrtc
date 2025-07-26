@@ -4,7 +4,7 @@
 // Для доступу до конкретної реалізації webrtc::RtpReceiver
 #include "pc/rtp_receiver.h"
 // Для доступу до обгортки RTCRtpReceiver з node-webrtc
-#include "rtp_receiver.h"
+#include "src/interfaces/rtc_rtp_receiver.h"
 // Для доступу до інтерфейсу MediaChannel та методу SetRawRtpPacketSink
 #include "media/base/media_channel.h"
 
