@@ -21,7 +21,7 @@ class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
 
  private:
   void Stop(const Napi::CallbackInfo& info);
-  // ВИПРАВЛЕНО: Приватний метод для логіки зупинки
+  // Приватний метод для логіки зупинки
   void _Stop();
   static Napi::FunctionReference audio_constructor;
   static Napi::FunctionReference video_constructor;

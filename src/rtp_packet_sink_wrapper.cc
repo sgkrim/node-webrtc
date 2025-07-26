@@ -2,6 +2,8 @@
 #include <rtc_base/logging.h>
 // Додано повний опис RtpReceiverInterface
 #include "api/rtp_receiver_interface.h"
+// ВИПРАВЛЕНО: Додано опис MediaChannel
+#include "media/base/media_channel.h"
 
 // Використовуємо AsyncWorker для асинхронних викликів
 class OnPacketWorker : public Napi::AsyncWorker {
@@ -81,8 +83,10 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
-  // ВИПРАВЛЕНО: Використовуємо правильну назву методу для M81
-  _receiver->SetRtpPacketSink(_sink.get());
+  // ВИПРАВЛЕНО: Використовуємо правильний механізм для M81
+  if (_receiver && _receiver->media_channel()) {
+    _receiver->media_channel()->SetRawRtpPacketSink(_sink.get());
+  }
 }
 
 RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
@@ -95,9 +99,9 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& info) {
 
 // Вся логіка винесена в приватний метод
 void RtpPacketSinkWrapper::_Stop() {
-    if (_receiver) {
-        // ВИПРАВЛЕНО: Використовуємо правильну назву методу для M81
-        _receiver->SetRtpPacketSink(nullptr);
+    if (_receiver && _receiver->media_channel()) {
+        // ВИПРАВЛЕНО: Використовуємо правильний механізм для M81
+        _receiver->media_channel()->SetRawRtpPacketSink(nullptr);
         _receiver = nullptr;
     }
     if (!_onpacket.IsEmpty()) {
