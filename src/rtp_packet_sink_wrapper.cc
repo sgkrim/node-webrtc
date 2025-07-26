@@ -4,7 +4,7 @@
 #include "api/rtp_receiver_interface.h"
 // Додано опис MediaChannel
 #include "media/base/media_channel.h"
-// ВИПРАВЛЕНО: Додано опис конкретного класу RtpReceiverProxy
+// Додано опис конкретного класу RtpReceiverProxy
 #include "pc/rtp_receiver.h"
 
 
@@ -31,7 +31,7 @@ class OnPacketWorker : public Napi::AsyncWorker {
     packet_obj.Set("timestamp", Napi::Number::New(Env(), _data->timestamp));
 
     Callback().Call({packet_obj});
-    delete _data;
+    delete data;
   }
 
  private:
@@ -86,10 +86,10 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
-  // ВИПРАВЛЕНО: Використовуємо static_cast до RtpReceiverProxy, як підказав компілятор
-  auto* receiver_impl = static_cast<webrtc::RtpReceiverProxy*>(_receiver.get());
-  if (receiver_impl && receiver_impl->media_channel()) {
-    receiver_impl->media_channel()->SetRawRtpPacketSink(_sink.get());
+  // ВИПРАВЛЕНО: Отримуємо доступ до внутрішньої реалізації через proxy
+  auto* receiver_proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(_receiver.get());
+  if (receiver_proxy && receiver_proxy->internal()) {
+    receiver_proxy->internal()->SetRawRtpPacketSink(_sink.get());
   }
 }
 
@@ -104,10 +104,10 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& info) {
 // Вся логіка винесена в приватний метод
 void RtpPacketSinkWrapper::_Stop() {
     if (_receiver) {
-      // ВИПРАВЛЕНО: Використовуємо static_cast до RtpReceiverProxy, як підказав компілятор
-      auto* receiver_impl = static_cast<webrtc::RtpReceiverProxy*>(_receiver.get());
-      if (receiver_impl && receiver_impl->media_channel()) {
-        receiver_impl->media_channel()->SetRawRtpPacketSink(nullptr);
+      // ВИПРАВЛЕНО: Отримуємо доступ до внутрішньої реалізації через proxy
+      auto* receiver_proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(_receiver.get());
+      if (receiver_proxy && receiver_proxy->internal()) {
+        receiver_proxy->internal()->SetRawRtpPacketSink(nullptr);
       }
       _receiver = nullptr;
     }
