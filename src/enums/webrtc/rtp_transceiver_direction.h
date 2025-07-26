@@ -1,6 +1,6 @@
 #pragma once
 
-#include <webrtc/api/rtp_transceiver_interface.h>
+#include <api/rtp_transceiver_interface.h>
 
 // IWYU pragma: no_include "src/enums/macros/impls.h"
 

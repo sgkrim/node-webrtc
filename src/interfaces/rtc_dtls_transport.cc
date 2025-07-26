@@ -12,10 +12,10 @@
 #include <utility>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/peer_connection_interface.h>  // IWYU pragma: keep
-#include <webrtc/api/rtc_error.h>
-#include <webrtc/rtc_base/location.h>
-#include <webrtc/rtc_base/thread.h>
+#include <api/peer_connection_interface.h>  // IWYU pragma: keep
+#include <api/rtc_error.h>
+#include <rtc_base/location.h>
+#include <rtc_base/thread.h>
 
 #include "src/converters.h"
 #include "src/converters/napi.h"

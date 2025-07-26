@@ -7,8 +7,8 @@
  */
 #include "src/methods/get_user_media.h"
 
-#include <webrtc/api/audio_options.h>
-#include <webrtc/api/peer_connection_interface.h>
+#include <api/audio_options.h>
+#include <api/peer_connection_interface.h>
 
 #include "src/converters.h"
 #include "src/converters/arguments.h"

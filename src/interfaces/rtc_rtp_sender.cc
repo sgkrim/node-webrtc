@@ -7,7 +7,7 @@
  */
 #include "src/interfaces/rtc_rtp_sender.h"
 
-#include <webrtc/api/rtp_parameters.h>
+#include <api/rtp_parameters.h>
 
 #include "src/converters.h"
 #include "src/converters/arguments.h"

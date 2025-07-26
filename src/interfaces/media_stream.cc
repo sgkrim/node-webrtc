@@ -7,7 +7,7 @@
  */
 #include "src/interfaces/media_stream.h"
 
-#include <webrtc/api/peer_connection_interface.h>
+#include <api/peer_connection_interface.h>
 #include <api/scoped_refptr.h>
 
 #include "src/converters.h"

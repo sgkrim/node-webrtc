@@ -1,6 +1,6 @@
 #pragma once
 
-#include <webrtc/api/sctp_transport_interface.h>
+#include <api/sctp_transport_interface.h>
 
 // IWYU pragma: no_include "src/enums/macros/impls.h"
 

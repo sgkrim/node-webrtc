@@ -1,6 +1,6 @@
 #pragma once
 
-#include <webrtc/p2p/base/transport_description.h>
+#include <p2p/base/transport_description.h>
 
 // IWYU pragma: no_include "src/enums/macros/impls.h"
 

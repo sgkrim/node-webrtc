@@ -1,6 +1,6 @@
 #pragma once
 
-#include <webrtc/rtc_base/buffer.h>
+#include <rtc_base/buffer.h>
 
 #include "src/converters/napi.h"
 

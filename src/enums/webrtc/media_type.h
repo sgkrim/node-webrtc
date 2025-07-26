@@ -1,6 +1,6 @@
 #pragma once
 
-#include <webrtc/api/media_types.h>
+#include <api/media_types.h>
 
 // IWYU pragma: no_include "src/enums/macros/impls.h"
 

@@ -16,21 +16,21 @@
 #include <vector>
 
 #include <absl/memory/memory.h>
-#include <webrtc/common_audio/wav_file.h>
-#include <webrtc/modules/audio_device/include/audio_device_default.h>
-#include <webrtc/modules/audio_device/include/audio_device_defines.h>
-#include <webrtc/rtc_base/buffer.h>
-#include <webrtc/rtc_base/checks.h>
-#include <webrtc/rtc_base/critical_section.h>
-#include <webrtc/rtc_base/event.h>
-#include <webrtc/rtc_base/logging.h>
-#include <webrtc/rtc_base/numerics/safe_conversions.h>
-#include <webrtc/rtc_base/platform_thread.h>
-#include <webrtc/rtc_base/random.h>
-#include <webrtc/rtc_base/ref_counted_object.h>
-#include <webrtc/rtc_base/thread.h>
-#include <webrtc/rtc_base/thread_annotations.h>
-#include <webrtc/rtc_base/time_utils.h>
+#include <common_audio/wav_file.h>
+#include <modules/audio_device/include/audio_device_default.h>
+#include <modules/audio_device/include/audio_device_defines.h>
+#include <rtc_base/buffer.h>
+#include <rtc_base/checks.h>
+#include <rtc_base/critical_section.h>
+#include <rtc_base/event.h>
+#include <rtc_base/logging.h>
+#include <rtc_base/numerics/safe_conversions.h>
+#include <rtc_base/platform_thread.h>
+#include <rtc_base/random.h>
+#include <rtc_base/ref_counted_object.h>
+#include <rtc_base/thread.h>
+#include <rtc_base/thread_annotations.h>
+#include <rtc_base/time_utils.h>
 
 namespace node_webrtc {
 
