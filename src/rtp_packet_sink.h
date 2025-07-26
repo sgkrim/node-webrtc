@@ -2,7 +2,7 @@
 #define RTP_PACKET_SINK_H_
 
 #include <functional>
-#include <api/rtp_packet_sink_interface.h>
+#include <call/rtp_packet_sink_interface.h>
 #include <api/rtp_headers.h>
 #include <rtc_base/synchronization/mutex.h>
 
