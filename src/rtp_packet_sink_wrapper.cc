@@ -31,7 +31,8 @@ class OnPacketWorker : public Napi::AsyncWorker {
     packet_obj.Set("timestamp", Napi::Number::New(Env(), _data->timestamp));
 
     Callback().Call({packet_obj});
-    delete data;
+    // ВИПРАВЛЕНО: Видаляємо правильний вказівник
+    delete _data;
   }
 
  private:
@@ -88,8 +89,11 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
 
   // ВИПРАВЛЕНО: Отримуємо доступ до внутрішньої реалізації через proxy
   auto* receiver_proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(_receiver.get());
-  if (receiver_proxy && receiver_proxy->internal()) {
-    receiver_proxy->internal()->SetRawRtpPacketSink(_sink.get());
+  if (receiver_proxy) {
+    auto* receiver_internal = static_cast<webrtc::RtpReceiver*>(receiver_proxy->internal());
+    if (receiver_internal && receiver_internal->media_channel()) {
+      receiver_internal->media_channel()->SetRawRtpPacketSink(_sink.get());
+    }
   }
 }
 
@@ -106,8 +110,11 @@ void RtpPacketSinkWrapper::_Stop() {
     if (_receiver) {
       // ВИПРАВЛЕНО: Отримуємо доступ до внутрішньої реалізації через proxy
       auto* receiver_proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(_receiver.get());
-      if (receiver_proxy && receiver_proxy->internal()) {
-        receiver_proxy->internal()->SetRawRtpPacketSink(nullptr);
+      if (receiver_proxy) {
+        auto* receiver_internal = static_cast<webrtc::RtpReceiver*>(receiver_proxy->internal());
+        if (receiver_internal && receiver_internal->media_channel()) {
+          receiver_internal->media_channel()->SetRawRtpPacketSink(nullptr);
+        }
       }
       _receiver = nullptr;
     }
