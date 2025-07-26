@@ -319,8 +319,19 @@ set(node_addon_api_dir ${CMAKE_SOURCE_DIR}/node_modules/node-addon-api)
 #
 # is to include all the header files here.
 target_include_directories(${MODULE} SYSTEM PRIVATE
+  # Шляхи для Node.js
   ${node_addon_api_dir}/..
-  ${libwebrtc_source_dir}
+
+  # --- НОВІ І ВИПРАВЛЕНІ ШЛЯХИ ДЛЯ WEBRTC ---
+  # Основний корінь вихідного коду
+  "${libwebrtc_src_dir}"
+  # Точний шлях до заголовків Opus всередині WebRTC
+  "${libwebrtc_src_dir}/third_party/opus/src/include"
+  # Системний шлях до Opus (як запасний варіант)
+  "/usr/include/opus"
+  # -------------------------------------------
+
+  # Старі шляхи, які теж можуть бути корисними
   ${libwebrtc_source_dir}/webrtc
   ${libwebrtc_source_dir}/webrtc/third_party/abseil-cpp
   ${libwebrtc_source_dir}/webrtc/third_party/libyuv/include
