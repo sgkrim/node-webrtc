@@ -42,7 +42,7 @@ static void dispose(void*) {
 }
 
 static Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  node_webrtc::RtpPacketSinkWrapper::Init(env, exports);
+  RtpPacketSinkWrapper::Init(env, exports);
   node_webrtc::AsyncContextReleaser::Init(env, exports);
   node_webrtc::ErrorFactory::Init(env, exports);
   node_webrtc::GetDisplayMedia::Init(env, exports);
