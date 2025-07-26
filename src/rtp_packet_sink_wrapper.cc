@@ -89,7 +89,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   // ВИПРАВЛЕНО: Використовуємо правильний ланцюжок викликів
   auto* receiver_proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(_receiver.get());
   if (receiver_proxy && receiver_proxy->internal()) {
-    auto* receiver_internal = static_cast<webrtc::RtpReceiver*>(receiver_proxy->internal());
+    auto receiver_internal = receiver_proxy->internal();
     if (receiver_internal && receiver_internal->media_channel()) {
       receiver_internal->media_channel()->SetRawRtpPacketSink(_sink.get());
     }
@@ -101,6 +101,7 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 }
 
 void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& info) {
+    NODE_WRTC_UNUSED(info);
     _Stop();
 }
 
@@ -110,7 +111,7 @@ void RtpPacketSinkWrapper::_Stop() {
       // ВИПРАВЛЕНО: Використовуємо правильний ланцюжок викликів
       auto* receiver_proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(_receiver.get());
       if (receiver_proxy && receiver_proxy->internal()) {
-        auto* receiver_internal = static_cast<webrtc::RtpReceiver*>(receiver_proxy->internal());
+        auto receiver_internal = receiver_proxy->internal();
         if (receiver_internal && receiver_internal->media_channel()) {
           receiver_internal->media_channel()->SetRawRtpPacketSink(nullptr);
         }
