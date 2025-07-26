@@ -4,7 +4,7 @@
 #include "api/rtp_receiver_interface.h"
 // Додано опис MediaChannel
 #include "media/base/media_channel.h"
-// Додано опис конкретного класу RtpReceiverProxy
+// ВИПРАВЛЕНО: Додано опис конкретного класу RtpReceiver
 #include "pc/rtp_receiver.h"
 
 
