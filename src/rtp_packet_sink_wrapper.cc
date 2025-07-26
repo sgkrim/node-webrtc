@@ -6,7 +6,6 @@
 #include "media/base/media_channel.h"
 // ВИПРАВЛЕНО: Додано опис конкретного класу RtpReceiver, щоб static_cast працював
 #include "pc/rtp_receiver.h"
-#include "src/common.h"
 
 
 // Використовуємо AsyncWorker для асинхронних викликів
@@ -103,7 +102,6 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 }
 
 void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& info) {
-    NODE_WRTC_UNUSED(info);
     _Stop();
 }
 
