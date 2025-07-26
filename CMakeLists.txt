@@ -298,6 +298,9 @@ nodejs_init(${nodejs_init_args})
 
 file(GLOB_RECURSE MODULE_SRC src/*.cc src/*.h)
 add_nodejs_module(${MODULE} ${MODULE_SRC})
+target_include_directories(${MODULE} PRIVATE
+  "${libwebrtc_src_dir}"
+)
 set_property(TARGET ${MODULE} PROPERTY CXX_STANDARD 14)
 
 if(NOT iwyu_path STREQUAL "iwyu_path-NOTFOUND")
