@@ -1,6 +1,6 @@
 #pragma once
 
-#include <webrtc/api/peer_connection_interface.h>
+#include <api/peer_connection_interface.h>
 
 #include "src/converters/napi.h"
 #include "src/functional/maybe.h"

@@ -1,6 +1,6 @@
 #include "src/dictionaries/node_webrtc/some_error.h"
 
-#include <webrtc/api/rtc_error.h>
+#include <api/rtc_error.h>
 
 namespace node_webrtc {
 

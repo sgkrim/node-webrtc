@@ -3,7 +3,7 @@
 #include <utility>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/jsep.h>
+#include <api/jsep.h>
 
 #include "src/dictionaries/macros/napi.h"
 #include "src/functional/curry.h"

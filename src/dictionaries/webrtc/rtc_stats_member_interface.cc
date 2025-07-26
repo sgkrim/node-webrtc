@@ -7,7 +7,7 @@
 #include <vector>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/stats/rtc_stats.h>
+#include <api/stats/rtc_stats.h>
 
 #include "src/converters.h"
 

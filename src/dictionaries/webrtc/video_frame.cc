@@ -3,7 +3,7 @@
 #include <utility>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/video/video_frame.h>
+#include <api/video/video_frame.h>
 
 #include "src/dictionaries/macros/napi.h"
 #include "src/dictionaries/webrtc/video_frame_buffer.h"  // IWYU pragma: keep

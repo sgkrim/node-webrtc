@@ -1,6 +1,6 @@
 #include "src/dictionaries/webrtc/video_frame_buffer.h"
 
-#include <webrtc/api/video/i420_buffer.h>
+#include <api/video/i420_buffer.h>
 
 #include "src/dictionaries/node_webrtc/image_data.h"
 #include "src/functional/validation.h"

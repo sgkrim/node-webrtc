@@ -4,9 +4,9 @@
 #include <utility>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/candidate.h>
-#include <webrtc/api/jsep.h>
-#include <webrtc/p2p/base/port.h>
+#include <api/candidate.h>
+#include <api/jsep.h>
+#include <p2p/base/port.h>
 
 #include "src/converters.h"
 #include "src/dictionaries/macros/napi.h"

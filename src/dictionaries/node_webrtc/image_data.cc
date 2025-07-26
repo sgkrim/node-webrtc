@@ -1,7 +1,7 @@
 #include "src/dictionaries/node_webrtc/image_data.h"
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/video/i420_buffer.h>
+#include <api/video/i420_buffer.h>
 
 #include "src/converters.h"
 #include "src/converters/object.h"

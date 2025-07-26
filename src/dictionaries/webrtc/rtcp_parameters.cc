@@ -5,7 +5,7 @@
 #include <utility>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/rtp_parameters.h>
+#include <api/rtp_parameters.h>
 
 #include "src/converters/object.h"
 #include "src/dictionaries/macros/napi.h"

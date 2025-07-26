@@ -3,7 +3,7 @@
 #include <utility>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/rtp_parameters.h>
+#include <api/rtp_parameters.h>
 
 #include "src/dictionaries/macros/napi.h"
 #include "src/functional/validation.h"

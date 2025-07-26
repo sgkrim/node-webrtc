@@ -6,7 +6,7 @@
 #include <vector>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/peer_connection_interface.h>
+#include <api/peer_connection_interface.h>
 
 #include "src/converters/napi.h"
 #include "src/dictionaries/macros/napi.h"
