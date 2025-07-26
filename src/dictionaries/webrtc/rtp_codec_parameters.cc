@@ -8,7 +8,7 @@
 
 #include <absl/types/optional.h>
 #include <node-addon-api/napi.h>
-#include <webrtc/api/rtp_parameters.h>
+#include <api/rtp_parameters.h>
 
 #include "src/converters.h"
 #include "src/converters/object.h"

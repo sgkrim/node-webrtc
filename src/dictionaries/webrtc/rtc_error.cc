@@ -2,7 +2,7 @@
 
 #include <node-addon-api/napi.h>
 #include <utility>
-#include <webrtc/api/rtc_error.h>
+#include <api/rtc_error.h>
 
 #include "src/functional/validation.h"
 #include "src/node/error_factory.h"

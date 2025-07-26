@@ -7,8 +7,8 @@
  */
 #include "src/interfaces/rtc_audio_source.h"
 
-#include <webrtc/api/peer_connection_interface.h>
-#include <webrtc/rtc_base/ref_counted_object.h>
+#include <api/peer_connection_interface.h>
+#include <rtc_base/ref_counted_object.h>
 
 #include "src/converters.h"
 #include "src/converters/arguments.h"

@@ -10,7 +10,7 @@
 #include <type_traits>
 #include <utility>
 
-#include <webrtc/api/video/video_source_interface.h>
+#include <api/video/video_source_interface.h>
 
 #include "src/converters.h"
 #include "src/converters/arguments.h"

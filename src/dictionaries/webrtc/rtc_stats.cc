@@ -6,7 +6,7 @@
 #include <vector>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/stats/rtc_stats.h>
+#include <api/stats/rtc_stats.h>
 
 #include "src/dictionaries/macros/napi.h"
 #include "src/dictionaries/webrtc/rtc_stats_member_interface.h"  // IWYU pragma: keep

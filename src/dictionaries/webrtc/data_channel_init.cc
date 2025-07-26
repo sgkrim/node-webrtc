@@ -4,7 +4,7 @@
 #include <iosfwd>
 #include <string>
 
-#include <webrtc/api/data_channel_interface.h>
+#include <api/data_channel_interface.h>
 
 #include "src/enums/node_webrtc/rtc_priority_type.h"
 #include "src/functional/maybe.h"

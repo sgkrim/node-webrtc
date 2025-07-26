@@ -7,7 +7,7 @@
  */
 #include "src/interfaces/rtc_peer_connection/rtc_stats_collector.h"
 
-#include <webrtc/api/stats/rtc_stats_report.h>
+#include <api/stats/rtc_stats_report.h>
 
 #include "src/dictionaries/webrtc/rtc_stats_report.h"  // IWYU pragma: keep
 

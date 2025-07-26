@@ -1,6 +1,6 @@
 #include "src/dictionaries/webrtc/rtp_parameters.h"
 
-#include <webrtc/api/rtp_parameters.h>
+#include <api/rtp_parameters.h>
 
 #include "src/converters/object.h"
 #include "src/enums/webrtc/degradation_preference.h"

@@ -9,7 +9,7 @@
 
 #include <type_traits>
 
-#include <webrtc/api/rtc_error.h>
+#include <api/rtc_error.h>
 
 #include "src/converters/napi.h"
 #include "src/dictionaries/node_webrtc/some_error.h"

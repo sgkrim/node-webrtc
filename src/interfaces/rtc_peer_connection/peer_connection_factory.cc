@@ -9,20 +9,20 @@
 
 #include <memory>
 
-#include <webrtc/api/audio_codecs/builtin_audio_decoder_factory.h>
-#include <webrtc/api/audio_codecs/builtin_audio_encoder_factory.h>
-#include <webrtc/api/create_peerconnection_factory.h>
-#include <webrtc/api/peer_connection_interface.h>
-#include <webrtc/api/video_codecs/builtin_video_decoder_factory.h>
-#include <webrtc/api/video_codecs/builtin_video_encoder_factory.h>
-#include <webrtc/api/video_codecs/video_decoder_factory.h>
-#include <webrtc/api/video_codecs/video_encoder_factory.h>
-#include <webrtc/modules/audio_device/include/audio_device.h>
-#include <webrtc/modules/audio_device/include/fake_audio_device.h>
-#include <webrtc/p2p/base/basic_packet_socket_factory.h>
-#include <webrtc/rtc_base/location.h>
-#include <webrtc/rtc_base/ssl_adapter.h>
-#include <webrtc/rtc_base/thread.h>
+#include <api/audio_codecs/builtin_audio_decoder_factory.h>
+#include <api/audio_codecs/builtin_audio_encoder_factory.h>
+#include <api/create_peerconnection_factory.h>
+#include <api/peer_connection_interface.h>
+#include <api/video_codecs/builtin_video_decoder_factory.h>
+#include <api/video_codecs/builtin_video_encoder_factory.h>
+#include <api/video_codecs/video_decoder_factory.h>
+#include <api/video_codecs/video_encoder_factory.h>
+#include <modules/audio_device/include/audio_device.h>
+#include <modules/audio_device/include/fake_audio_device.h>
+#include <p2p/base/basic_packet_socket_factory.h>
+#include <rtc_base/location.h>
+#include <rtc_base/ssl_adapter.h>
+#include <rtc_base/thread.h>
 
 #include "src/webrtc/test_audio_device_module.h"
 #include "src/webrtc/zero_capturer.h"

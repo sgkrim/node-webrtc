@@ -9,7 +9,7 @@
 
 #include <memory>
 
-#include <webrtc/api/jsep.h>
+#include <api/jsep.h>
 
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/node/promise.h"
