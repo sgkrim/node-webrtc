@@ -1,12 +1,12 @@
 #include "rtp_packet_sink_wrapper.h"
 #include <rtc_base/logging.h>
-// ВИПРАВЛЕНО: Додано повний опис RtpReceiverInterface
+// Додано повний опис RtpReceiverInterface
 #include "api/rtp_receiver_interface.h"
 
 // Використовуємо AsyncWorker для асинхронних викликів
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
-  // ВИПРАВЛЕНО: Приймаємо callback за константним посиланням
+  // Приймаємо callback за константним посиланням
   OnPacketWorker(const Napi::Function& callback, RtpPacketData* data)
     : Napi::AsyncWorker(callback), _data(data) {}
 
@@ -65,7 +65,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   }
 
   auto rtpReceiverWrapper = node_webrtc::RTCRtpReceiver::Unwrap(info[0].As<Napi::Object>());
-  // ВИПРАВЛЕНО: Використовуємо новий публічний метод
+  // Використовуємо новий публічний метод, який ми додали
   _receiver = rtpReceiverWrapper->receiver();
 
   Napi::Function js_callback = info[1].As<Napi::Function>();
@@ -81,7 +81,8 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
-  _receiver->SetSink(_sink.get());
+  // ВИПРАВЛЕНО: Використовуємо правильну назву методу для M81
+  _receiver->SetDepacketizerToRtpPacketSink(_sink.get());
 }
 
 RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
@@ -92,10 +93,11 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& info) {
     _Stop();
 }
 
-// ВИПРАВЛЕНО: Вся логіка винесена в приватний метод
+// Вся логіка винесена в приватний метод
 void RtpPacketSinkWrapper::_Stop() {
     if (_receiver) {
-        _receiver->SetSink(nullptr);
+        // ВИПРАВЛЕНО: Використовуємо правильну назву методу для M81
+        _receiver->SetDepacketizerToRtpPacketSink(nullptr);
         _receiver = nullptr;
     }
     if (!_onpacket.IsEmpty()) {
