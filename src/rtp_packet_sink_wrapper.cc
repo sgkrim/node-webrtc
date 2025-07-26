@@ -6,6 +6,7 @@
 #include "media/base/media_channel.h"
 // ВИПРАВЛЕНО: Додано опис конкретного класу RtpReceiver, щоб static_cast працював
 #include "pc/rtp_receiver.h"
+#include "src/common.h"
 
 
 // Використовуємо AsyncWorker для асинхронних викликів
@@ -89,7 +90,8 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   // ВИПРАВЛЕНО: Використовуємо правильний ланцюжок викликів
   auto* receiver_proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(_receiver.get());
   if (receiver_proxy && receiver_proxy->internal()) {
-    auto receiver_internal = receiver_proxy->internal();
+    auto receiver_interface = receiver_proxy->internal();
+    auto* receiver_internal = static_cast<webrtc::RtpReceiver*>(receiver_interface.get());
     if (receiver_internal && receiver_internal->media_channel()) {
       receiver_internal->media_channel()->SetRawRtpPacketSink(_sink.get());
     }
@@ -111,7 +113,8 @@ void RtpPacketSinkWrapper::_Stop() {
       // ВИПРАВЛЕНО: Використовуємо правильний ланцюжок викликів
       auto* receiver_proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(_receiver.get());
       if (receiver_proxy && receiver_proxy->internal()) {
-        auto receiver_internal = receiver_proxy->internal();
+        auto receiver_interface = receiver_proxy->internal();
+        auto* receiver_internal = static_cast<webrtc::RtpReceiver*>(receiver_interface.get());
         if (receiver_internal && receiver_internal->media_channel()) {
           receiver_internal->media_channel()->SetRawRtpPacketSink(nullptr);
         }
