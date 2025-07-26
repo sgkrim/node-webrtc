@@ -4,6 +4,9 @@
 #include <node-addon-api/napi.h>
 #include "rtp_packet_sink.h"
 #include "interfaces/rtc_rtp_receiver.h" // Правильний шлях до файлу
+// ВИПРАВЛЕНО: Перенесено include сюди, щоб гарантувати видимість класів
+#include "pc/rtp_receiver.h"
+#include "media/base/media_channel.h"
 
 // Структура для безпечної передачі даних між потоками
 struct RtpPacketData {
