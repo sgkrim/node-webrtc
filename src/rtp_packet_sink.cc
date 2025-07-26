@@ -1,4 +1,4 @@
-#include "src/rtp_packet_sink.h"
+#include "rtp_packet_sink.h"
 #include <rtc_base/logging.h>
 
 RtpPacketSink::RtpPacketSink(OnRtpPacketCallback on_packet)
@@ -11,7 +11,7 @@ RtpPacketSink::~RtpPacketSink() {
 }
 
 void RtpPacketSink::OnRtpPacket(const webrtc::RtpPacketReceived& packet) {
-  // ВИПРАВЛЕНО: Використовуємо absl::MutexLock замість webrtc::MutexLock
+  // Використовуємо absl::MutexLock замість webrtc::MutexLock
   absl::MutexLock lock(&_mutex);
   if (_on_packet) {
     auto payload = packet.payload();

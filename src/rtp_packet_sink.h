@@ -3,11 +3,11 @@
 
 #include <functional>
 // Шлях до rtp_packet_sink_interface.h для версії M81
-#include <call/rtp_packet_sink_interface.h>
+#include "call/rtp_packet_sink_interface.h"
 // Шлях до rtp_packet_received.h, де визначено клас RtpPacketReceived
-#include <modules/rtp_rtcp/source/rtp_packet_received.h>
-// ВИПРАВЛЕНО: Використовуємо м'ютекс з бібліотеки Abseil
-#include <third_party/abseil-cpp/absl/synchronization/mutex.h>
+#include "modules/rtp_rtcp/source/rtp_packet_received.h"
+// Використовуємо м'ютекс з бібліотеки Abseil
+#include "third_party/abseil-cpp/absl/synchronization/mutex.h"
 
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
 public:
@@ -19,7 +19,7 @@ public:
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override;
 
 private:
-  // ВИПРАВЛЕНО: Використовуємо absl::Mutex замість webrtc::Mutex
+  // Використовуємо absl::Mutex замість webrtc::Mutex
   absl::Mutex _mutex;
   OnRtpPacketCallback _on_packet RTC_GUARDED_BY(_mutex);
 };
