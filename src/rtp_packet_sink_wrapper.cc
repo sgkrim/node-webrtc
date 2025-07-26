@@ -1,11 +1,33 @@
-#include "src/rtp_packet_sink_wrapper.h"
+#include "rtp_packet_sink_wrapper.h"
 #include <rtc_base/logging.h>
 
-// Структура для безпечної передачі даних між потоками
-struct RtpPacketData {
-    std::unique_ptr<uint8_t[]> data;
-    size_t length;
-    uint32_t timestamp;
+// ВИПРАВЛЕНО: Використовуємо AsyncWorker для асинхронних викликів
+class OnPacketWorker : public Napi::AsyncWorker {
+ public:
+  OnPacketWorker(Napi::Function& callback, RtpPacketData* data)
+    : Napi::AsyncWorker(callback), _data(data) {}
+
+  ~OnPacketWorker() {}
+
+  void Execute() override {
+    // Робота виконується в іншому потоці, але в нашому випадку
+    // дані вже скопійовані, тому тут нічого робити не потрібно.
+  }
+
+  void OnOK() override {
+    Napi::HandleScope scope(Env());
+    Napi::Object packet_obj = Napi::Object::New(Env());
+
+    // Створюємо Buffer, який сам звільнить пам'ять
+    packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(Env(), _data->data.release(), _data->length, [](Napi::Env, uint8_t* d){ delete[] d; }));
+    packet_obj.Set("timestamp", Napi::Number::New(Env(), _data->timestamp));
+
+    Callback().Call({packet_obj});
+    delete _data;
+  }
+
+ private:
+  RtpPacketData* _data;
 };
 
 Napi::FunctionReference RtpPacketSinkWrapper::audio_constructor;
@@ -43,8 +65,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _receiver = rtpReceiverWrapper->receiver();
 
   Napi::Function js_callback = info[1].As<Napi::Function>();
-  _onpacket = Napi::ThreadSafeFunction::New(
-      info.Env(), js_callback, "OnRtpPacket", 0, 1, [](Napi::Env) {});
+  _onpacket = Napi::Persistent(js_callback);
 
   _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
     auto* packet_data = new RtpPacketData();
@@ -53,14 +74,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     memcpy(packet_data->data.get(), data, length);
     packet_data->timestamp = timestamp;
 
-    _onpacket.BlockingCall(packet_data, [](Napi::Env env, Napi::Function jsCallback, RtpPacketData* data) {
-        Napi::Object packet_obj = Napi::Object::New(env);
-        // Створюємо Buffer, який сам звільнить пам'ять
-        packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(env, data->data.release(), data->length, [](Napi::Env, uint8_t* d){ delete[] d; }));
-        packet_obj.Set("timestamp", Napi::Number::New(env, data->timestamp));
-        jsCallback.Call({packet_obj});
-        delete data;
-    });
+    (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
   _receiver->SetSink(_sink.get());
@@ -72,12 +86,10 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 
 void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& info) {
     if (_receiver) {
-        // У старій версії API, щоб відключити sink, потрібно передати nullptr
         _receiver->SetSink(nullptr);
         _receiver = nullptr;
     }
-    if (_onpacket) {
-      _onpacket.Release();
-      _onpacket = nullptr;
+    if (!_onpacket.IsEmpty()) {
+      _onpacket.Reset();
     }
 }

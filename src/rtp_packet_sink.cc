@@ -11,7 +11,8 @@ RtpPacketSink::~RtpPacketSink() {
 }
 
 void RtpPacketSink::OnRtpPacket(const webrtc::RtpPacketReceived& packet) {
-  webrtc::MutexLock lock(&_mutex);
+  // ВИПРАВЛЕНО: Використовуємо absl::MutexLock замість webrtc::MutexLock
+  absl::MutexLock lock(&_mutex);
   if (_on_packet) {
     auto payload = packet.payload();
     auto timestamp = packet.Timestamp();
