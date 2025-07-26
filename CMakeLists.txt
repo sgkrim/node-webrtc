@@ -317,6 +317,7 @@ set(node_addon_api_dir ${CMAKE_SOURCE_DIR}/node_modules/node-addon-api)
 #
 #   https://gitlab.kitware.com/cmake/cmake/issues/15052
 #
+message(STATUS "Шлях до libwebrtc source: ${libwebrtc_src_dir}")
 # is to include all the header files here.
 target_include_directories(${MODULE} SYSTEM PRIVATE
   # Шляхи для Node.js
@@ -327,6 +328,7 @@ target_include_directories(${MODULE} SYSTEM PRIVATE
   "${libwebrtc_src_dir}"
   # Точний шлях до заголовків Opus всередині WebRTC
   "${libwebrtc_src_dir}/third_party/opus/src/include"
+  "/home/repo/node_webrtc/build/external/libwebrtc/download/src"
   # Системний шлях до Opus (як запасний варіант)
   "/usr/include/opus"
   # -------------------------------------------
