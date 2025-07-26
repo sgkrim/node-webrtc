@@ -10,8 +10,8 @@
 #include <iosfwd>
 #include <memory>
 
-#include <webrtc/api/data_channel_interface.h>
-#include <webrtc/api/scoped_refptr.h>
+#include <api/data_channel_interface.h>
+#include <api/scoped_refptr.h>
 
 #include "src/enums/node_webrtc/binary_type.h"
 #include "src/node/event_queue.h"

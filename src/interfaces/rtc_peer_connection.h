@@ -10,8 +10,8 @@
 #include <vector>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/peer_connection_interface.h>
-#include <webrtc/api/scoped_refptr.h>
+#include <api/peer_connection_interface.h>
+#include <api/scoped_refptr.h>
 
 #include "src/node/async_object_wrap_with_loop.h"
 #include "src/dictionaries/node_webrtc/extended_rtc_configuration.h"

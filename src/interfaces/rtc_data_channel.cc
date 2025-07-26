@@ -9,9 +9,9 @@
 
 #include <utility>
 
-#include <webrtc/api/data_channel_interface.h>
-#include <webrtc/api/scoped_refptr.h>
-#include <webrtc/rtc_base/copy_on_write_buffer.h>
+#include <api/data_channel_interface.h>
+#include <api/scoped_refptr.h>
+#include <rtc_base/copy_on_write_buffer.h>
 
 #include "src/enums/node_webrtc/binary_type.h"
 #include "src/enums/webrtc/data_state.h"

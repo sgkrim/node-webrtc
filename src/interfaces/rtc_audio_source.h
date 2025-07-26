@@ -11,9 +11,9 @@
 #include <memory>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/media_stream_interface.h>
-#include <webrtc/api/scoped_refptr.h>
-#include <webrtc/pc/local_audio_source.h>
+#include <api/media_stream_interface.h>
+#include <api/scoped_refptr.h>
+#include <pc/local_audio_source.h>
 
 #include "src/dictionaries/node_webrtc/rtc_on_data_event_dict.h"
 #include "src/interfaces/rtc_peer_connection/peer_connection_factory.h"

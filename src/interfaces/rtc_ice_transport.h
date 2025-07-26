@@ -10,10 +10,10 @@
 #include <mutex>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/ice_transport_interface.h>
-#include <webrtc/api/scoped_refptr.h>
-#include <webrtc/p2p/base/ice_transport_internal.h>
-#include <webrtc/rtc_base/third_party/sigslot/sigslot.h>
+#include <api/ice_transport_interface.h>
+#include <api/scoped_refptr.h>
+#include <p2p/base/ice_transport_internal.h>
+#include <rtc_base/third_party/sigslot/sigslot.h>
 
 #include "src/enums/node_webrtc/rtc_ice_component.h"
 #include "src/node/async_object_wrap_with_loop.h"

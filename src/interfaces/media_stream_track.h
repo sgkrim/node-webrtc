@@ -10,8 +10,8 @@
 #include <memory>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/media_stream_interface.h>
-#include <webrtc/api/scoped_refptr.h>
+#include <api/media_stream_interface.h>
+#include <api/scoped_refptr.h>
 
 #include "src/converters.h"
 #include "src/converters/napi.h"

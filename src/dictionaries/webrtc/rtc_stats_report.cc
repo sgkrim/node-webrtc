@@ -1,8 +1,8 @@
 #include "src/dictionaries/webrtc/rtc_stats_report.h"
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/scoped_refptr.h>  // IWYU pragma: keep
-#include <webrtc/api/stats/rtc_stats_report.h>  // IWYU pragma: keep
+#include <api/scoped_refptr.h>  // IWYU pragma: keep
+#include <api/stats/rtc_stats_report.h>  // IWYU pragma: keep
 
 #include "src/converters/object.h"
 #include "src/dictionaries/webrtc/rtc_stats.h"  // IWYU pragma: keep

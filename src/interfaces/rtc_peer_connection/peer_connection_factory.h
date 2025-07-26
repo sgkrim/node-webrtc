@@ -11,9 +11,9 @@
 #include <mutex>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/peer_connection_interface.h>
-#include <webrtc/api/scoped_refptr.h>
-#include <webrtc/modules/audio_device/include/audio_device.h>
+#include <api/peer_connection_interface.h>
+#include <api/scoped_refptr.h>
+#include <modules/audio_device/include/audio_device.h>
 
 #include "src/functional/maybe.h"
 

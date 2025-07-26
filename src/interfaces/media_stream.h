@@ -10,7 +10,7 @@
 #include <memory>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/scoped_refptr.h>
+#include <api/scoped_refptr.h>
 
 #include "src/converters/napi.h"
 #include "src/node/wrap.h"

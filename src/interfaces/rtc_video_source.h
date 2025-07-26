@@ -11,9 +11,9 @@
 
 #include <absl/types/optional.h>
 #include <node-addon-api/napi.h>
-#include <webrtc/api/media_stream_interface.h>
-#include <webrtc/api/scoped_refptr.h>
-#include <webrtc/media/base/adapted_video_track_source.h>
+#include <api/media_stream_interface.h>
+#include <api/scoped_refptr.h>
+#include <media/base/adapted_video_track_source.h>
 
 #include "src/dictionaries/node_webrtc/rtc_video_source_init.h"
 #include "src/interfaces/rtc_peer_connection/peer_connection_factory.h"

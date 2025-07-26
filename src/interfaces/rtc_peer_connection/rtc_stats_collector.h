@@ -8,8 +8,8 @@
 #pragma once
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/scoped_refptr.h>
-#include <webrtc/api/stats/rtc_stats_collector_callback.h>
+#include <api/scoped_refptr.h>
+#include <api/stats/rtc_stats_collector_callback.h>
 
 #include "src/interfaces/rtc_peer_connection.h"  // IWYU pragma: keep
 #include "src/node/promise.h"

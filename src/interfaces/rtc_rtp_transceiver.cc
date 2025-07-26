@@ -7,8 +7,8 @@
  */
 #include "src/interfaces/rtc_rtp_transceiver.h"
 
-#include <webrtc/api/rtp_transceiver_interface.h>
-#include <webrtc/api/scoped_refptr.h>
+#include <api/rtp_transceiver_interface.h>
+#include <api/scoped_refptr.h>
 
 #include "src/converters/absl.h"
 #include "src/converters/arguments.h"

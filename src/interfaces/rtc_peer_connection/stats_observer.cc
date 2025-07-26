@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include <webrtc/api/scoped_refptr.h>
+#include <api/scoped_refptr.h>
 
 #include "src/dictionaries/node_webrtc/rtc_stats_response_init.h"  // IWYU pragma: keep
 

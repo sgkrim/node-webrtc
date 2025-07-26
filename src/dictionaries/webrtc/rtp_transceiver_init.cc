@@ -3,10 +3,10 @@
 #include <iosfwd>
 #include <vector>
 
-#include <webrtc/api/media_stream_interface.h>
-#include <webrtc/api/rtp_parameters.h>
-#include <webrtc/api/rtp_transceiver_interface.h>
-#include <webrtc/api/scoped_refptr.h>
+#include <api/media_stream_interface.h>
+#include <api/rtp_parameters.h>
+#include <api/rtp_transceiver_interface.h>
+#include <api/scoped_refptr.h>
 
 #include "src/enums/webrtc/rtp_transceiver_direction.h"  // IWYU pragma: keep
 #include "src/dictionaries/webrtc/rtp_encoding_parameters.h"  // IWYU pragma: keep

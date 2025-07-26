@@ -8,9 +8,9 @@
 #pragma once
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/media_stream_interface.h>
-#include <webrtc/api/scoped_refptr.h>
-#include <webrtc/api/video/video_sink_interface.h>
+#include <api/media_stream_interface.h>
+#include <api/scoped_refptr.h>
+#include <api/video/video_sink_interface.h>
 
 #include "src/node/async_object_wrap_with_loop.h"
 

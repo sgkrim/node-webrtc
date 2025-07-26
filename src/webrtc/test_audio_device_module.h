@@ -14,11 +14,11 @@
 #include <iosfwd>
 #include <memory>
 
-#include <webrtc/api/array_view.h>
-#include <webrtc/api/scoped_refptr.h>
-#include <webrtc/modules/audio_device/include/audio_device.h>
-#include <webrtc/rtc_base/buffer.h>
-#include <webrtc/rtc_base/event.h>
+#include <api/array_view.h>
+#include <api/scoped_refptr.h>
+#include <modules/audio_device/include/audio_device.h>
+#include <rtc_base/buffer.h>
+#include <rtc_base/event.h>
 
 namespace webrtc { class AudioTransport; }
 

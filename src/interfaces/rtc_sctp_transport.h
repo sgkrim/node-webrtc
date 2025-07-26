@@ -10,8 +10,8 @@
 #include <mutex>
 
 #include <node-addon-api/napi.h>
-#include <webrtc/api/sctp_transport_interface.h>
-#include <webrtc/api/scoped_refptr.h>
+#include <api/sctp_transport_interface.h>
+#include <api/scoped_refptr.h>
 
 #include "src/node/async_object_wrap_with_loop.h"
 #include "src/node/wrap.h"

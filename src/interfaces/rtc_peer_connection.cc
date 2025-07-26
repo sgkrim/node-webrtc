@@ -9,12 +9,12 @@
 
 #include <iosfwd>
 
-#include <webrtc/api/media_types.h>
-#include <webrtc/api/peer_connection_interface.h>
-#include <webrtc/api/rtc_error.h>
-#include <webrtc/api/rtp_transceiver_interface.h>
-#include <webrtc/api/scoped_refptr.h>
-#include <webrtc/p2p/client/basic_port_allocator.h>
+#include <api/media_types.h>
+#include <api/peer_connection_interface.h>
+#include <api/rtc_error.h>
+#include <api/rtp_transceiver_interface.h>
+#include <api/scoped_refptr.h>
+#include <p2p/client/basic_port_allocator.h>
 
 #include "src/converters.h"
 #include "src/converters/arguments.h"
