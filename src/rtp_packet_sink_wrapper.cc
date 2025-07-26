@@ -1,6 +1,12 @@
 #include "rtp_packet_sink_wrapper.h"
 #include <rtc_base/logging.h>
+// Додано повний опис RtpReceiverInterface
 #include "api/rtp_receiver_interface.h"
+// Додано опис MediaChannel
+#include "media/base/media_channel.h"
+// ВИПРАВЛЕНО: Додано опис конкретного класу RtpReceiver, щоб static_cast працював
+#include "pc/rtp_receiver.h"
+
 
 // Використовуємо AsyncWorker для асинхронних викликів
 class OnPacketWorker : public Napi::AsyncWorker {
