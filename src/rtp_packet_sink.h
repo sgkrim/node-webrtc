@@ -4,7 +4,7 @@
 #include <functional>
 #include <call/rtp_packet_sink_interface.h>
 #include <api/rtp_headers.h>
-#include <rtc_base/synchronization/mutex.h>
+#include <third_party/abseil-cpp/absl/synchronization/mutex.h>
 
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
 public:
