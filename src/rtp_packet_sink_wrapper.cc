@@ -82,7 +82,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   });
 
   // ВИПРАВЛЕНО: Використовуємо правильну назву методу для M81
-  _receiver->SetDepacketizerToRtpPacketSink(_sink.get());
+  _receiver->SetRtpPacketSink(_sink.get());
 }
 
 RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
@@ -97,7 +97,7 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& info) {
 void RtpPacketSinkWrapper::_Stop() {
     if (_receiver) {
         // ВИПРАВЛЕНО: Використовуємо правильну назву методу для M81
-        _receiver->SetDepacketizerToRtpPacketSink(nullptr);
+        _receiver->SetRtpPacketSink(nullptr);
         _receiver = nullptr;
     }
     if (!_onpacket.IsEmpty()) {
