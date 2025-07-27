@@ -16,9 +16,6 @@
 #include "src/node/async_object_wrap.h"
 #include "src/node/wrap.h"
 
-namespace cricket {
-class MediaChannel;
-}
 
 namespace webrtc { class RtpReceiverInterface; }
 
@@ -42,7 +39,6 @@ class RTCRtpReceiver: public AsyncObjectWrap<RTCRtpReceiver> {
 
   static Napi::FunctionReference& constructor();
   rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver() { return _receiver; }
-  cricket::MediaChannel* media_channel();
 
  private:
   static RTCRtpReceiver* Create(

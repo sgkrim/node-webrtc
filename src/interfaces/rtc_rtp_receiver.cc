@@ -7,8 +7,6 @@
  */
 #include "src/interfaces/rtc_rtp_receiver.h"
 
-#include <pc/rtp_receiver.h>
-#include <media/base/media_channel.h>
 #include <api/rtp_receiver_interface.h>
 
 #include "src/converters.h"
@@ -31,34 +29,6 @@ Napi::FunctionReference& RTCRtpReceiver::constructor() {
   return constructor;
 }
 
-// РЕАЛІЗАЦІЯ НАШОГО НОВОГО МЕТОДУ
-cricket::MediaChannel* RTCRtpReceiver::media_channel() {
-  // 1. Отримуємо "сирий" вказівник на базовий інтерфейс.
-  webrtc::RtpReceiverInterface* base_interface = _receiver.get();
-  if (!base_interface) {
-    return nullptr;
-  }
-
-  // 2. Перетворюємо базовий інтерфейс на конкретний клас проксі.
-  auto* proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(base_interface);
-  if (!proxy) {
-    return nullptr;
-  }
-
-  // 3. Викликаємо метод .internal(), щоб отримати вказівник
-  //    на справжню реалізацію.
-  auto* internal_interface = proxy->internal();
-  if (!internal_interface) {
-    return nullptr;
-  }
-
-  // 4. ОСТАННІЙ КРОК: Використовуємо reinterpret_cast.
-  //    Це єдиний спосіб обійти перевірку типів компілятором.
-  auto* receiver_impl = reinterpret_cast<webrtc::RtpReceiver*>(internal_interface);
-
-  // 5. Повертаємо бажаний результат.
-  return receiver_impl->media_channel();
-}
 
 RTCRtpReceiver::RTCRtpReceiver(const Napi::CallbackInfo& info)
   : AsyncObjectWrap<RTCRtpReceiver>("RTCRtpReceiver", info) {
