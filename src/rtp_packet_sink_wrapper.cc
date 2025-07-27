@@ -2,14 +2,14 @@
 
 #include <memory>
 
-// Включаємо всі необхідні заголовки для доступу до внутрішніх API
-// ВИПРАВЛЕНО: Видалено неіснуючі заголовки.
+// Включаємо всі необхідні заголовки
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
 #include "media/base/media_channel.h"
+#include "rtp_packet_sink.h"
 
 
 // AsyncWorker для безпечної передачі даних в головний потік Node.js
@@ -62,18 +62,15 @@ void RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
 
 RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   : Napi::ObjectWrap<RtpPacketSinkWrapper>(info) {
-  // 1. Перевіряємо аргументи: (peerConnection, rtpReceiver, callback)
   if (info.Length() < 3 || !info[0].IsObject() || !info[1].IsObject() || !info[2].IsFunction()) {
     Napi::TypeError::New(info.Env(), "Expected (peerConnection, rtpReceiver, callback)").ThrowAsJavaScriptException();
     return;
   }
 
-  // 2. Зберігаємо посилання на JS-об'єкти, щоб використати їх пізніше
   _pcRef = Napi::Persistent(info[0].As<Napi::Object>());
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  // 3. Створюємо наш sink
   _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
     auto* packet_data = new RtpPacketData();
     packet_data->length = length;
@@ -83,9 +80,10 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
-  // 4. Знаходимо потрібний MediaChannel і встановлюємо sink
   if (auto* channel = GetMediaChannel()) {
-    channel->SetRawRtpPacketSink(_sink.get());
+    // ВИПРАВЛЕНО: У cricket::MediaChannel немає SetRawRtpPacketSink, але є SetSink.
+    // Для сирих RTP-пакетів цей метод виконує ту саму функцію.
+    channel->SetSink(_sink.get());
   }
 }
 
@@ -95,11 +93,11 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
-    // Знаходимо канал і видаляємо sink
     if (auto* channel = GetMediaChannel()) {
-      channel->SetRawRtpPacketSink(nullptr);
+      // ВИПРАВЛЕНО: Аналогічно до конструктора, видаляємо sink через SetSink(nullptr).
+      channel->SetSink(nullptr);
     }
-    _sink.reset(); // Звільняємо sink
+    _sink.reset();
   }
   if (!_onpacket.IsEmpty()) {
     _onpacket.Reset();
@@ -116,13 +114,12 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& /* info */) {
   _Stop();
 }
 
-// Допоміжний метод для пошуку MediaChannel
+// ВИПРАВЛЕНО: Цей метод тепер використовує "дружній" доступ до приватних полів.
 cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
   if (_pcRef.IsEmpty() || _receiverRef.IsEmpty()) {
     return nullptr;
   }
 
-  // "Розгортаємо" JS-об'єкти до C++ класів
   auto* pc_wrapper = node_webrtc::RTCPeerConnection::Unwrap(_pcRef.Value());
   auto* receiver_wrapper = node_webrtc::RTCRtpReceiver::Unwrap(_receiverRef.Value());
 
@@ -130,27 +127,28 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // Отримуємо доступ до внутрішніх об'єктів WebRTC
-  webrtc::PeerConnection* webrtc_pc = pc_wrapper->pc();
+  // ВИПРАВЛЕНО: Отримуємо доступ до приватного поля _pc, бо ми "друг" класу.
+  webrtc::PeerConnection* webrtc_pc = pc_wrapper->_pc.get();
   auto receiver_track = receiver_wrapper->receiver()->track();
 
   if (!webrtc_pc || !receiver_track) {
     return nullptr;
   }
 
-  // Отримуємо менеджер каналів
+  // ВИПРАВЛЕНО: Отримуємо доступ до приватного методу channel_manager(), бо ми "друг" _pc.
   cricket::ChannelManager* channel_manager = webrtc_pc->channel_manager();
   if (!channel_manager) {
     return nullptr;
   }
 
-  // Визначаємо тип каналу (аудіо/відео) і повертаємо його
-  if (receiver_track->kind() == "audio") {
-    return channel_manager->voice_channel();
-  }
-  if (receiver_track->kind() == "video") {
-    return channel_manager->video_channel();
+  // ВИПРАВЛЕНО: У ChannelManager немає публічних voice_channel()/video_channel(),
+  // тому шукаємо потрібний канал за ID треку, який є публічним.
+  cricket::MediaChannel* media_channel = nullptr;
+  if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
+    media_channel = channel_manager->GetVoiceChannel(receiver_track->id());
+  } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
+    media_channel = channel_manager->GetVideoChannel(receiver_track->id());
   }
 
-  return nullptr;
+  return media_channel;
 }

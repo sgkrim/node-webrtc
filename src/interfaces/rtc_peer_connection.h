@@ -27,6 +27,8 @@ class RtpTransceiverInterface;
 
 }  // namespace webrtc
 
+class RtpPacketSinkWrapper;
+
 namespace node_webrtc {
 
 class RTCDataChannel;
@@ -66,6 +68,7 @@ class RTCPeerConnection
   void SaveLastSdp(const RTCSessionDescriptionInit& lastSdp);
 
  private:
+  friend class RtpPacketSinkWrapper; // <--- ДОДАЙТЕ ЦЕЙ РЯДОК
   Napi::Value AddTrack(const Napi::CallbackInfo&);
   Napi::Value AddTransceiver(const Napi::CallbackInfo&);
   Napi::Value RemoveTrack(const Napi::CallbackInfo&);
