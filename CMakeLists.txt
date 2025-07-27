@@ -208,7 +208,7 @@ ExternalProject_Add(
 
     # ===================================================================
     # VVV ОСЬ ЦЕЙ РЯДОК ПОТРІБНО ДОДАТИ VVV
-    PATCH_COMMAND     ${GIT_EXECUTABLE} apply --ignore-whitespace ${CMAKE_SOURCE_DIR}/patches/make_werbrtc_public.patch
+    PATCH_COMMAND     ${GIT_EXECUTABLE} apply --ignore-whitespace ${CMAKE_SOURCE_DIR}/patches/make_webrtc_public.patch
     # ===================================================================
 
   CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env BINARY_DIR=<BINARY_DIR> DEPOT_TOOLS=${depot_tools_install_dir} GN_GEN_ARGS=${GN_GEN_ARGS} SOURCE_DIR=<SOURCE_DIR> ${CMAKE_SOURCE_DIR}/scripts/configure-webrtc.${suffix}
