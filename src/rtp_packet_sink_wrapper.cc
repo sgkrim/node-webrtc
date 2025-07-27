@@ -3,13 +3,13 @@
 #include <memory>
 
 // Включаємо всі необхідні заголовки для доступу до внутрішніх API
+// ВИПРАВЛЕНО: Видалено неіснуючі заголовки.
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
-#include "media/base/voice_channel.h"
-#include "media/base/video_channel.h"
+#include "media/base/media_channel.h"
 
 
 // AsyncWorker для безпечної передачі даних в головний потік Node.js
