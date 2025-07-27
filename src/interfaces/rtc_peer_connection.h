@@ -27,7 +27,10 @@ class RtpTransceiverInterface;
 
 }  // namespace webrtc
 
-class RtpPacketSinkWrapper;
+// Попереднє оголошення, яке нам знадобиться для нового методу
+namespace cricket {
+class MediaChannel;
+}
 
 namespace node_webrtc {
 
@@ -67,8 +70,10 @@ class RTCPeerConnection
 
   void SaveLastSdp(const RTCSessionDescriptionInit& lastSdp);
 
+  // ВИПРАВЛЕНО: Додано новий публічний метод для доступу до MediaChannel
+  cricket::MediaChannel* GetMediaChannel(const std::string& trackId);
+
  private:
-  friend class RtpPacketSinkWrapper; // <--- ДОДАЙТЕ ЦЕЙ РЯДОК
   Napi::Value AddTrack(const Napi::CallbackInfo&);
   Napi::Value AddTransceiver(const Napi::CallbackInfo&);
   Napi::Value RemoveTrack(const Napi::CallbackInfo&);

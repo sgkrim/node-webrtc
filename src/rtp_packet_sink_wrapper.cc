@@ -6,10 +6,12 @@
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
-#include "pc/peer_connection.h"
-#include "pc/channel_manager.h"
 #include "media/base/media_channel.h"
 #include "rtp_packet_sink.h"
+
+// Переконайтесь, що ваш rtp_packet_sink.h визначає RtpPacketSink
+// як клас, що успадковує від webrtc::RtpPacketSinkInterface
+// приклад: class RtpPacketSink : public webrtc::RtpPacketSinkInterface { ... };
 
 
 // AsyncWorker для безпечної передачі даних в головний потік Node.js
@@ -18,7 +20,9 @@ class OnPacketWorker : public Napi::AsyncWorker {
   OnPacketWorker(const Napi::Function& callback, RtpPacketData* data)
     : Napi::AsyncWorker(callback), _data(data) {}
   ~OnPacketWorker() override = default;
+
   void Execute() override {}
+
   void OnOK() override {
     Napi::HandleScope scope(Env());
     Napi::Object packet_obj = Napi::Object::New(Env());
@@ -32,6 +36,7 @@ class OnPacketWorker : public Napi::AsyncWorker {
     Callback().Call({packet_obj});
     delete _data;
   }
+
  private:
   RtpPacketData* _data;
 };
@@ -71,19 +76,20 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
+  _sink = std::make_unique<RtpPacketSink>([this](const webrtc::RtpPacketReceived& packet) {
+    // Копіюємо дані в нашу структуру для передачі в інший потік
     auto* packet_data = new RtpPacketData();
-    packet_data->length = length;
-    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[length]);
-    memcpy(packet_data->data.get(), data, length);
-    packet_data->timestamp = timestamp;
+    packet_data->length = packet.size();
+    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
+    memcpy(packet_data->data.get(), packet.data(), packet.size());
+    packet_data->timestamp = packet.Timestamp();
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
   if (auto* channel = GetMediaChannel()) {
-    // ВИПРАВЛЕНО: У cricket::MediaChannel немає SetRawRtpPacketSink, але є SetSink.
-    // Для сирих RTP-пакетів цей метод виконує ту саму функцію.
-    channel->SetSink(_sink.get());
+    // ВИПРАВЛЕНО: Використовуємо метод SetRawRtpPacketSink.
+    // Це правильний метод для сирих RTP пакетів.
+    channel->SetRawRtpPacketSink(_sink.get());
   }
 }
 
@@ -94,8 +100,8 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
     if (auto* channel = GetMediaChannel()) {
-      // ВИПРАВЛЕНО: Аналогічно до конструктора, видаляємо sink через SetSink(nullptr).
-      channel->SetSink(nullptr);
+      // Видаляємо sink, передаючи nullptr
+      channel->SetRawRtpPacketSink(nullptr);
     }
     _sink.reset();
   }
@@ -114,7 +120,6 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& /* info */) {
   _Stop();
 }
 
-// ВИПРАВЛЕНО: Цей метод тепер використовує "дружній" доступ до приватних полів.
 cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
   if (_pcRef.IsEmpty() || _receiverRef.IsEmpty()) {
     return nullptr;
@@ -127,28 +132,11 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // ВИПРАВЛЕНО: Отримуємо доступ до приватного поля _pc, бо ми "друг" класу.
-  webrtc::PeerConnection* webrtc_pc = pc_wrapper->_pc.get();
   auto receiver_track = receiver_wrapper->receiver()->track();
-
-  if (!webrtc_pc || !receiver_track) {
-    return nullptr;
+  if (!receiver_track) {
+      return nullptr;
   }
 
-  // ВИПРАВЛЕНО: Отримуємо доступ до приватного методу channel_manager(), бо ми "друг" _pc.
-  cricket::ChannelManager* channel_manager = webrtc_pc->channel_manager();
-  if (!channel_manager) {
-    return nullptr;
-  }
-
-  // ВИПРАВЛЕНО: У ChannelManager немає публічних voice_channel()/video_channel(),
-  // тому шукаємо потрібний канал за ID треку, який є публічним.
-  cricket::MediaChannel* media_channel = nullptr;
-  if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
-    media_channel = channel_manager->GetVoiceChannel(receiver_track->id());
-  } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
-    media_channel = channel_manager->GetVideoChannel(receiver_track->id());
-  }
-
-  return media_channel;
+  // Використовуємо наш новий публічний метод, який ми додали в RTCPeerConnection
+  return pc_wrapper->GetMediaChannel(receiver_track->id());
 }
