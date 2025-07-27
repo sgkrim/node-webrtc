@@ -1,36 +1,33 @@
-#ifndef RTP_PACKET_SINK_WRAPPER_H_
-#define RTP_PACKET_SINK_WRAPPER_H_
+#pragma once
 
-#include <node-addon-api/napi.h>
-#include "rtp_packet_sink.h"
-#include "interfaces/rtc_rtp_receiver.h" // Правильний шлях до файлу
+#include <napi.h>
+#include <memory>
+#include "src/rtp_packet_sink.h"
 
-// Структура для безпечної передачі даних між потоками
-struct RtpPacketData {
-    std::unique_ptr<uint8_t[]> data;
-    size_t length;
-    uint32_t timestamp;
-};
+// Попереднє оголошення, щоб не включати сюди важкі заголовки
+namespace cricket {
+class MediaChannel;
+}
 
 class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
  public:
-  static Napi::Object Init(Napi::Env env, Napi::Object exports);
+  static void Init(Napi::Env env, Napi::Object exports);
   RtpPacketSinkWrapper(const Napi::CallbackInfo& info);
-  // Прибрано 'override' для сумісності зі старою N-API
-  ~RtpPacketSinkWrapper();
+  ~RtpPacketSinkWrapper() override;
 
  private:
-  void Stop(const Napi::CallbackInfo& info);
-  // Приватний метод для логіки зупинки
-  void _Stop();
   static Napi::FunctionReference audio_constructor;
   static Napi::FunctionReference video_constructor;
 
-  rtc::scoped_refptr<webrtc::RtpReceiverInterface> _receiver;
-  std::unique_ptr<RtpPacketSink> _sink;
-  // Використовуємо FunctionReference замість ThreadSafeFunction
-  Napi::FunctionReference _onpacket;
-  Napi::ObjectReference _receiverWrapperRef;
-};
+  void Stop(const Napi::CallbackInfo&);
+  void _Stop();
+  cricket::MediaChannel* GetMediaChannel();
 
-#endif  // RTP_PACKET_SINK_WRAPPER_H_
+  // Зберігаємо посилання на JS-об'єкти, щоб отримати їх пізніше
+  Napi::ObjectReference _pcRef;
+  Napi::ObjectReference _receiverRef;
+
+  // Callback для пакетів
+  Napi::FunctionReference _onpacket;
+  std::unique_ptr<RtpPacketSink> _sink;
+};
