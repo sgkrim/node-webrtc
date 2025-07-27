@@ -7,6 +7,8 @@
  */
 #include "src/interfaces/rtc_rtp_receiver.h"
 
+#include <pc/rtp_receiver.h>
+#include <media/base/media_channel.h>
 #include <api/rtp_receiver_interface.h>
 
 #include "src/converters.h"
@@ -31,19 +33,35 @@ Napi::FunctionReference& RTCRtpReceiver::constructor() {
 
 // РЕАЛІЗАЦІЯ НАШОГО НОВОГО МЕТОДУ
 cricket::MediaChannel* RTCRtpReceiver::media_channel() {
-  // ВИПРАВЛЕННЯ: Використовуємо правильну назву змінної - _receiver
-  auto* interface = _receiver->internal();
-  if (!interface) {
+  // 1. Отримуємо "сирий" вказівник на базовий інтерфейс.
+  //    Його статичний тип - webrtc::RtpReceiverInterface.
+  webrtc::RtpReceiverInterface* base_interface = _receiver.get();
+  if (!base_interface) {
     return nullptr;
   }
 
-  // Оскільки ми підключили "pc/rtp_receiver.h",
-  // компілятор тепер знає про цей клас, і static_cast спрацює.
-  auto* receiver_impl = static_cast<webrtc::RtpReceiver*>(interface);
+  // 2. Перетворюємо базовий інтерфейс на конкретний клас проксі.
+  //    Цей клас МАЄ метод .internal().
+  auto* proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(base_interface);
+  if (!proxy) {
+    return nullptr;
+  }
+
+  // 3. Викликаємо метод .internal() на проксі, щоб отримати
+  //    вказівник на СПРАВЖНЮ реалізацію.
+  auto* internal_interface = proxy->internal();
+  if (!internal_interface) {
+    return nullptr;
+  }
+
+  // 4. І вже цей вказівник на реалізацію ми можемо безпечно
+  //    перетворити на webrtc::RtpReceiver, який МАЄ метод .media_channel().
+  auto* receiver_impl = static_cast<webrtc::RtpReceiver*>(internal_interface);
   if (!receiver_impl) {
     return nullptr;
   }
 
+  // 5. Повертаємо бажаний результат.
   return receiver_impl->media_channel();
 }
 
