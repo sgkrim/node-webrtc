@@ -57,18 +57,16 @@
 namespace node_webrtc {
 
 cricket::MediaChannel* RTCPeerConnection::GetMediaChannel(const std::string& trackId) {
-  if (!_pc) {
+  if (!_jinglePeerConnection) { // <--- ВИПРАВЛЕНО
     return nullptr;
   }
-  auto* channel_manager = _pc->channel_manager();
+  auto* channel_manager = _jinglePeerConnection->channel_manager(); // <--- ВИПРАВЛЕНО
   if (!channel_manager) {
     return nullptr;
   }
-  // Спочатку шукаємо в аудіо-каналах
   if (auto* channel = channel_manager->GetVoiceChannel(trackId)) {
     return channel;
   }
-  // Якщо не знайшли, шукаємо у відео-каналах
   if (auto* channel = channel_manager->GetVideoChannel(trackId)) {
     return channel;
   }
