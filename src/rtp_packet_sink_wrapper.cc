@@ -1,28 +1,21 @@
 #include "rtp_packet_sink_wrapper.h"
 
-#include <memory>
-
-// Включаємо всі необхідні заголовки
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
-#include "media/base/media_channel.h"
 #include "rtp_packet_sink.h"
 
-// Переконайтесь, що ваш rtp_packet_sink.h визначає RtpPacketSink
-// як клас, що успадковує від webrtc::RtpPacketSinkInterface
-// приклад: class RtpPacketSink : public webrtc::RtpPacketSinkInterface { ... };
+// Завдяки патчу і "дружбі" ці файли тепер доступні і працюють
+#include "pc/peer_connection.h"
+#include "pc/channel_manager.h"
+#include "media/base/media_channel.h"
 
-
-// AsyncWorker для безпечної передачі даних в головний потік Node.js
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
   OnPacketWorker(const Napi::Function& callback, RtpPacketData* data)
     : Napi::AsyncWorker(callback), _data(data) {}
   ~OnPacketWorker() override = default;
-
   void Execute() override {}
-
   void OnOK() override {
     Napi::HandleScope scope(Env());
     Napi::Object packet_obj = Napi::Object::New(Env());
@@ -36,15 +29,12 @@ class OnPacketWorker : public Napi::AsyncWorker {
     Callback().Call({packet_obj});
     delete _data;
   }
-
  private:
   RtpPacketData* _data;
 };
 
-
 Napi::FunctionReference RtpPacketSinkWrapper::audio_constructor;
 Napi::FunctionReference RtpPacketSinkWrapper::video_constructor;
-
 
 void RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function audio_func = DefineClass(env, "RTCRawAudioSink", {
@@ -52,13 +42,11 @@ void RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
   });
   audio_constructor = Napi::Persistent(audio_func);
   audio_constructor.SuppressDestruct();
-
   Napi::Function video_func = DefineClass(env, "RTCRawVideoSink", {
     InstanceMethod("stop", &RtpPacketSinkWrapper::Stop)
   });
   video_constructor = Napi::Persistent(video_func);
   video_constructor.SuppressDestruct();
-
   Napi::Object nonstandard = Napi::Object::New(env);
   nonstandard.Set("RTCRawAudioSink", audio_func);
   nonstandard.Set("RTCRawVideoSink", video_func);
@@ -77,7 +65,6 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
   _sink = std::make_unique<RtpPacketSink>([this](const webrtc::RtpPacketReceived& packet) {
-    // Копіюємо дані в нашу структуру для передачі в інший потік
     auto* packet_data = new RtpPacketData();
     packet_data->length = packet.size();
     packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
@@ -87,8 +74,6 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   });
 
   if (auto* channel = GetMediaChannel()) {
-    // ВИПРАВЛЕНО: Використовуємо метод SetRawRtpPacketSink.
-    // Це правильний метод для сирих RTP пакетів.
     channel->SetRawRtpPacketSink(_sink.get());
   }
 }
@@ -100,20 +85,13 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
     if (auto* channel = GetMediaChannel()) {
-      // Видаляємо sink, передаючи nullptr
       channel->SetRawRtpPacketSink(nullptr);
     }
     _sink.reset();
   }
-  if (!_onpacket.IsEmpty()) {
-    _onpacket.Reset();
-  }
-  if (!_pcRef.IsEmpty()) {
-    _pcRef.Reset();
-  }
-  if (!_receiverRef.IsEmpty()) {
-    _receiverRef.Reset();
-  }
+  if (!_onpacket.IsEmpty()) _onpacket.Reset();
+  if (!_pcRef.IsEmpty()) _pcRef.Reset();
+  if (!_receiverRef.IsEmpty()) _receiverRef.Reset();
 }
 
 void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& /* info */) {
@@ -132,11 +110,31 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  auto receiver_track = receiver_wrapper->receiver()->track();
-  if (!receiver_track) {
-      return nullptr;
+  // Завдяки "дружбі" ми маємо доступ до _jinglePeerConnection
+  webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->_jinglePeerConnection.get();
+  if (!pc_interface) {
+    return nullptr;
   }
 
-  // Використовуємо наш новий публічний метод, який ми додали в RTCPeerConnection
-  return pc_wrapper->GetMediaChannel(receiver_track->id());
+  auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
+
+  // Завдяки патчу цей виклик тепер коректний
+  auto* channel_manager = pc_impl->channel_manager();
+  if (!channel_manager) {
+    return nullptr;
+  }
+
+  auto receiver_track = receiver_wrapper->receiver()->track();
+  if (!receiver_track) {
+    return nullptr;
+  }
+
+  // Підказка компілятора була правильною: методи називаються Get...Channel
+  if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
+    return channel_manager->GetVoiceChannel(receiver_track->id());
+  } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
+    return channel_manager->GetVideoChannel(receiver_track->id());
+  }
+
+  return nullptr;
 }
