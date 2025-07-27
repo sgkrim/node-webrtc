@@ -7,7 +7,7 @@
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
 #include "pc/peer_connection.h"
-#include "media/base/channel_manager.h"
+#include "pc/channel_manager.h"
 #include "media/base/voice_channel.h"
 #include "media/base/video_channel.h"
 
