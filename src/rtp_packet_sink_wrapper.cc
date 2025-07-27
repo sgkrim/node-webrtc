@@ -129,7 +129,7 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // Підказка компілятора була правильною: методи називаються Get...Channel
+  // ВИПРАВЛЕНО: Використовуємо константи для порівняння типу треку
   if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
     return channel_manager->GetVoiceChannel(receiver_track->id());
   } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {

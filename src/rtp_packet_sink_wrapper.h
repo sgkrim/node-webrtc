@@ -12,6 +12,10 @@ namespace cricket {
 class MediaChannel;
 }
 
+namespace webrtc {
+class RtpPacketSinkInterface; // <--- ДОДАНО: Попереднє оголошення
+}
+
 // Структура для передачі даних між потоками
 struct RtpPacketData {
   std::unique_ptr<uint8_t[]> data;
