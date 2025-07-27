@@ -31,13 +31,19 @@ Napi::FunctionReference& RTCRtpReceiver::constructor() {
 
 // РЕАЛІЗАЦІЯ НАШОГО НОВОГО МЕТОДУ
 cricket::MediaChannel* RTCRtpReceiver::media_channel() {
-  // _jingleRtpReceiver - це і є наш проксі
-  auto* interface = _jingleRtpReceiver->internal();
+  // ВИПРАВЛЕННЯ: Використовуємо правильну назву змінної - _receiver
+  auto* interface = _receiver->internal();
   if (!interface) {
     return nullptr;
   }
-  // Всередині цього файлу ми МОЖЕМО безпечно робити цей cast
+
+  // Оскільки ми підключили "pc/rtp_receiver.h",
+  // компілятор тепер знає про цей клас, і static_cast спрацює.
   auto* receiver_impl = static_cast<webrtc::RtpReceiver*>(interface);
+  if (!receiver_impl) {
+    return nullptr;
+  }
+
   return receiver_impl->media_channel();
 }
 
