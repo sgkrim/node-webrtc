@@ -16,6 +16,10 @@
 #include "src/node/async_object_wrap.h"
 #include "src/node/wrap.h"
 
+namespace cricket {
+class MediaChannel;
+}
+
 namespace webrtc { class RtpReceiverInterface; }
 
 namespace node_webrtc {
