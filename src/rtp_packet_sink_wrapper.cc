@@ -1,7 +1,5 @@
 // --- КЛЮЧОВЕ ВИПРАВЛЕННЯ: ПОРЯДОК INCLUDE ---
 // 1. Включаємо конкретні реалізації з WebRTC ПЕРШ ЗА ВСЕ.
-//    Це дає компілятору повне визначення класів до того, як
-//    інші файли зможуть створити конфлікт.
 #include "pc/rtp_receiver.h"
 #include "media/base/media_channel.h"
 
@@ -24,10 +22,8 @@ class OnPacketWorker : public Napi::AsyncWorker {
 
   ~OnPacketWorker() {}
 
-  // Цей метод виконується в окремому потоці.
   void Execute() override {}
 
-  // Цей метод виконується в головному потоці Node.js після завершення Execute().
   void OnOK() override {
     Napi::HandleScope scope(Env());
     Napi::Object packet_obj = Napi::Object::New(Env());
@@ -48,7 +44,6 @@ class OnPacketWorker : public Napi::AsyncWorker {
   RtpPacketData* _data;
 };
 
-// Статичні члени для зберігання конструкторів JS-класів
 Napi::FunctionReference RtpPacketSinkWrapper::audio_constructor;
 Napi::FunctionReference RtpPacketSinkWrapper::video_constructor;
 
@@ -100,7 +95,8 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
 
   if (_receiver) {
     webrtc::RtpReceiverInterface* interface_ptr = _receiver.get();
-    auto* internal_impl = static_cast<webrtc::RtpReceiver*>(interface_ptr);
+    // ВИПРАВЛЕННЯ: Використовуємо тип, який підказує компілятор
+    auto* internal_impl = static_cast<webrtc::RtpReceiverProxy*>(interface_ptr);
     if (internal_impl && internal_impl->media_channel()) {
       internal_impl->media_channel()->SetRawRtpPacketSink(_sink.get());
     }
@@ -118,7 +114,8 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& /* info */) {
 void RtpPacketSinkWrapper::_Stop() {
   if (_receiver) {
     webrtc::RtpReceiverInterface* interface_ptr = _receiver.get();
-    auto* internal_impl = static_cast<webrtc::RtpReceiver*>(interface_ptr);
+    // ВИПРАВЛЕННЯ: Використовуємо тип, який підказує компілятор
+    auto* internal_impl = static_cast<webrtc::RtpReceiverProxy*>(interface_ptr);
     if (internal_impl && internal_impl->media_channel()) {
       internal_impl->media_channel()->SetRawRtpPacketSink(nullptr);
     }
