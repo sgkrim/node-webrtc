@@ -1,6 +1,6 @@
 #pragma once
 
-#include <napi.h>
+#include <node-addon-api/napi.h>
 #include <memory>
 #include "src/rtp_packet_sink.h"
 
