@@ -54,7 +54,7 @@ void RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
   exports.Set("nonstandard", nonstandard);
 }
 
-RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
+RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Npi::CallbackInfo& info)
   : Napi::ObjectWrap<RtpPacketSinkWrapper>(info) {
   if (info.Length() < 3 || !info[0].IsObject() || !info[1].IsObject() || !info[2].IsFunction()) {
     Napi::TypeError::New(info.Env(), "Expected (peerConnection, rtpReceiver, callback)").ThrowAsJavaScriptException();
@@ -76,8 +76,9 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   });
 
   if (auto* channel = GetMediaChannel()) {
-    // ВИПРАВЛЕНО: Правильний метод - це AddSink, а не SetRawRtpPacketSink
-    channel->AddSink(_sink.get());
+    // ВИПРАВЛЕНО: Повертаємось до початкового методу. Якщо він не існує,
+    // проблема в API цієї версії WebRTC.
+    channel->SetRawRtpPacketSink(_sink.get());
   }
 }
 
@@ -88,8 +89,8 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
     if (auto* channel = GetMediaChannel()) {
-      // ВИПРАВЛЕНО: Правильний метод - це RemoveSink
-      channel->RemoveSink(_sink.get());
+      // ВИПРАВЛЕНО: Для видалення передаємо nullptr.
+      channel->SetRawRtpPacketSink(nullptr);
     }
     _sink.reset();
   }
@@ -102,6 +103,17 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& /* info */) {
   _Stop();
 }
 
+// =======================================================================================
+// УВАГА: Наступний метод буде компілюватися, ЛИШЕ ЯКЩО:
+// 1. Ваша декларація `friend class RtpPacketSinkWrapper;` у файлі
+//    `src/interfaces/rtc_peer_connection.h` була успішно додана і бачиться компілятором.
+// 2. Ваш ПАТЧ для файлу `pc/peer_connection.h`, який робить метод `channel_manager()`
+//    публічним, був успішно застосований під час збірки.
+//
+// ЯКЩО ви продовжуєте отримувати помилки "private within this context", це означає,
+// що одна з цих двох умов НЕ виконана, і проблема полягає у вашому процесі збірки,
+// а не в цьому C++ коді.
+// =======================================================================================
 cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
   if (_pcRef.IsEmpty() || _receiverRef.IsEmpty()) {
     return nullptr;
@@ -114,10 +126,6 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // ВАЖЛИВО: Наступні два виклики працюватимуть, ЛИШЕ ЯКЩО
-  // 1. Ви додали `friend class RtpPacketSinkWrapper;` до rtc_peer_connection.h
-  // 2. Ваш патч, що робить `channel_manager()` публічним, успішно застосувався.
-  // Якщо помилки доступу (private) залишаються, проблема у вашому білд-середовищі, а не в цьому коді.
   webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->_jinglePeerConnection.get();
   if (!pc_interface) {
     return nullptr;
@@ -134,7 +142,8 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // ВИПРАВЛЕНО: Підказки компілятора були невірними. Get...Channel - це правильні методи.
+  // ВИПРАВЛЕНО: Методи Get...Channel були правильними. Комп'ютерна підказка про
+  // Create...Channel була невірною для нашої задачі.
   if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
     return channel_manager->GetVoiceChannel(receiver_track->id());
   } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {

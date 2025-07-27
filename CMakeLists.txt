@@ -205,6 +205,12 @@ ExternalProject_Add(
   BUILD_BYPRODUCTS  ${byproducts}
 
   DOWNLOAD_COMMAND  ${CMAKE_COMMAND} -E env DEPOT_TOOLS=${depot_tools_install_dir} PLATFORM=${PLATFORM} WEBRTC_REVISION=${WEBRTC_REVISION} ${CMAKE_SOURCE_DIR}/scripts/download-webrtc.${suffix}
+
+    # ===================================================================
+    # VVV ОСЬ ЦЕЙ РЯДОК ПОТРІБНО ДОДАТИ VVV
+    PATCH_COMMAND     ${GIT_EXECUTABLE} apply --ignore-whitespace ${CMAKE_SOURCE_DIR}/patches/make_werbrtc_public.patch
+    # ===================================================================
+
   CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env BINARY_DIR=<BINARY_DIR> DEPOT_TOOLS=${depot_tools_install_dir} GN_GEN_ARGS=${GN_GEN_ARGS} SOURCE_DIR=<SOURCE_DIR> ${CMAKE_SOURCE_DIR}/scripts/configure-webrtc.${suffix}
   BUILD_COMMAND     ${CMAKE_COMMAND} -E env CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} DEPOT_TOOLS=${depot_tools_install_dir} ${CMAKE_SOURCE_DIR}/scripts/build-webrtc.${suffix}
   INSTALL_COMMAND   ""
