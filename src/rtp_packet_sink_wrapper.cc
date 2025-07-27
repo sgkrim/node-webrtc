@@ -1,13 +1,14 @@
-#include "rtp_packet_sink_wrapper.h"
-
-// --- Необхідні заголовки ---
-
-// ВИПРАВЛЕНО: Використовуємо лапки "" замість <> для консистентності
-// та правильного порядку пошуку.
+// --- КЛЮЧОВЕ ВИПРАВЛЕННЯ: ПОРЯДОК INCLUDE ---
+// 1. Включаємо конкретні реалізації з WebRTC ПЕРШ ЗА ВСЕ.
+//    Це дає компілятору повне визначення класів до того, як
+//    інші файли зможуть створити конфлікт.
 #include "pc/rtp_receiver.h"
 #include "media/base/media_channel.h"
 
-// ВИПРАВЛЕНО: Прибрано префікс "src/", оскільки він вже є в шляхах CMake.
+// 2. Тепер включаємо заголовок нашого власного файлу.
+#include "rtp_packet_sink_wrapper.h"
+
+// 3. І лише в останню чергу включаємо заголовки обгорток з node-webrtc.
 #include "interfaces/rtc_rtp_receiver.h"
 
 
@@ -23,8 +24,10 @@ class OnPacketWorker : public Napi::AsyncWorker {
 
   ~OnPacketWorker() {}
 
+  // Цей метод виконується в окремому потоці.
   void Execute() override {}
 
+  // Цей метод виконується в головному потоці Node.js після завершення Execute().
   void OnOK() override {
     Napi::HandleScope scope(Env());
     Napi::Object packet_obj = Napi::Object::New(Env());
@@ -45,6 +48,7 @@ class OnPacketWorker : public Napi::AsyncWorker {
   RtpPacketData* _data;
 };
 
+// Статичні члени для зберігання конструкторів JS-класів
 Napi::FunctionReference RtpPacketSinkWrapper::audio_constructor;
 Napi::FunctionReference RtpPacketSinkWrapper::video_constructor;
 
