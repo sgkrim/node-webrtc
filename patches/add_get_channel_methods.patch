@@ -1,0 +1,41 @@
+--- a/pc/channel_manager.h
++++ b/pc/channel_manager.h
+@@ -107,6 +107,9 @@
+   void DestroyVideoChannel(VideoChannel* video_channel);
+   void DestroyRtpDataChannel(RtpDataChannel* data_channel);
+
++  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
++  VideoChannel* GetVideoChannel(const std::string& transport_name);
++
+   // Indicates that the first RTP packet has been received.
+   // Used for test purposes.
+   sigslot::signal0<> SignalFirstRtpPacketReceived;
+--- a/pc/channel_manager.cc
++++ b/pc/channel_manager.cc
+@@ -250,6 +250,24 @@
+     }
+   }
+
++  VoiceChannel* ChannelManager::GetVoiceChannel(
++      const std::string& transport_name) {
++    for (const auto& channel : voice_channels_) {
++      if (channel->transport_name() == transport_name) {
++        return channel.get();
++      }
++    }
++    return nullptr;
++  }
++
++  VideoChannel* ChannelManager::GetVideoChannel(
++      const std::string& transport_name) {
++    for (const auto& channel : video_channels_) {
++      if (channel->transport_name() == transport_name) {
++        return channel.get();
++      }
++    }
++    return nullptr;
++  }
++
+   void ChannelManager::OnMessage(rtc::Message* msg) {
+     switch (msg->message_id) {
+       case kMsgCreateVoiceChannel:
