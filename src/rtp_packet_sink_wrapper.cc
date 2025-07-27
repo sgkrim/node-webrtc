@@ -9,6 +9,7 @@
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
 #include "media/base/media_channel.h"
+#include "api/rtp_receiver_interface.h"
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
@@ -64,17 +65,19 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  _sink = std::make_unique<RtpPacketSink>([this](const webrtc::RtpPacketReceived& packet) {
+  // ВИПРАВЛЕНО: Сигнатура лямбди тепер відповідає очікуванням RtpPacketSink
+  _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
     auto* packet_data = new RtpPacketData();
-    packet_data->length = packet.size();
-    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
-    memcpy(packet_data->data.get(), packet.data(), packet.size());
-    packet_data->timestamp = packet.Timestamp();
+    packet_data->length = length;
+    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[length]);
+    memcpy(packet_data->data.get(), data, length);
+    packet_data->timestamp = timestamp;
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
   if (auto* channel = GetMediaChannel()) {
-    channel->SetRawRtpPacketSink(_sink.get());
+    // ВИПРАВЛЕНО: Правильний метод - це AddSink, а не SetRawRtpPacketSink
+    channel->AddSink(_sink.get());
   }
 }
 
@@ -85,7 +88,8 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
     if (auto* channel = GetMediaChannel()) {
-      channel->SetRawRtpPacketSink(nullptr);
+      // ВИПРАВЛЕНО: Правильний метод - це RemoveSink
+      channel->RemoveSink(_sink.get());
     }
     _sink.reset();
   }
@@ -110,15 +114,16 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // Завдяки "дружбі" ми маємо доступ до _jinglePeerConnection
+  // ВАЖЛИВО: Наступні два виклики працюватимуть, ЛИШЕ ЯКЩО
+  // 1. Ви додали `friend class RtpPacketSinkWrapper;` до rtc_peer_connection.h
+  // 2. Ваш патч, що робить `channel_manager()` публічним, успішно застосувався.
+  // Якщо помилки доступу (private) залишаються, проблема у вашому білд-середовищі, а не в цьому коді.
   webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->_jinglePeerConnection.get();
   if (!pc_interface) {
     return nullptr;
   }
 
   auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
-
-  // Завдяки патчу цей виклик тепер коректний
   auto* channel_manager = pc_impl->channel_manager();
   if (!channel_manager) {
     return nullptr;
@@ -129,7 +134,7 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // ВИПРАВЛЕНО: Використовуємо константи для порівняння типу треку
+  // ВИПРАВЛЕНО: Підказки компілятора були невірними. Get...Channel - це правильні методи.
   if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
     return channel_manager->GetVoiceChannel(receiver_track->id());
   } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
