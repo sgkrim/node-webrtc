@@ -1,6 +1,6 @@
 #pragma once
 
-#include <node-addon-api/napi.h>
+#include <node-addon-api/napi.h> // ВИПРАВЛЕНО: Використано повний шлях
 #include <memory>
 #include "src/rtp_packet_sink.h"
 
@@ -13,7 +13,7 @@ class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
  public:
   static void Init(Napi::Env env, Napi::Object exports);
   RtpPacketSinkWrapper(const Napi::CallbackInfo& info);
-  ~RtpPacketSinkWrapper() override;
+  ~RtpPacketSinkWrapper(); // ВИПРАВЛЕНО: Прибрано 'override'
 
  private:
   static Napi::FunctionReference audio_constructor;
