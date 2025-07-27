@@ -1,22 +1,15 @@
-// --- КЛЮЧОВЕ ВИПРАВЛЕННЯ: ПОРЯДОК INCLUDE ---
-// 1. Включаємо конкретні реалізації з WebRTC ПЕРШ ЗА ВСЕ.
-#include "pc/rtp_receiver.h"
-#include "media/base/media_channel.h"
-
-// 2. Тепер включаємо заголовок нашого власного файлу.
+// 1. Включаємо заголовок нашого власного файлу.
 #include "rtp_packet_sink_wrapper.h"
 
-// 3. І лише в останню чергу включаємо заголовки обгорток з node-webrtc.
+// 2. Включаємо заголовки обгорток з node-webrtc.
 #include "interfaces/rtc_rtp_receiver.h"
 
+// 3. Включаємо заголовок MediaChannel, оскільки ми працюємо з ним напряму
+#include "media/base/media_channel.h"
 
-/**
- * @brief Асинхронний воркер для безпечної передачі даних з потоку WebRTC
- * в головний потік Node.js (libuv).
- */
+
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
-  // Конструктор приймає callback-функцію та вказівник на дані пакета
   OnPacketWorker(const Napi::Function& callback, RtpPacketData* data)
     : Napi::AsyncWorker(callback), _data(data) {}
 
@@ -27,15 +20,11 @@ class OnPacketWorker : public Napi::AsyncWorker {
   void OnOK() override {
     Napi::HandleScope scope(Env());
     Napi::Object packet_obj = Napi::Object::New(Env());
-
     packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(
-      Env(),
-      _data->data.release(),
-      _data->length,
+      Env(), _data->data.release(), _data->length,
       [](Napi::Env, uint8_t* d) { delete[] d; }
     ));
     packet_obj.Set("timestamp", Napi::Number::New(Env(), _data->timestamp));
-
     Callback().Call({packet_obj});
     delete _data;
   }
@@ -75,13 +64,15 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     return;
   }
 
-  auto* rtpReceiverWrapper = node_webrtc::RTCRtpReceiver::Unwrap(info[0].As<Napi::Object>());
+  // Зберігаємо посилання на JS-об'єкт, щоб він не був видалений збирачем сміття
+  _receiverWrapperRef = Napi::Persistent(info[0].As<Napi::Object>());
+
+  auto* rtpReceiverWrapper = node_webrtc::RTCRtpReceiver::Unwrap(_receiverWrapperRef.Value());
   if (!rtpReceiverWrapper) {
     Napi::TypeError::New(info.Env(), "Failed to unwrap RTCRtpReceiver").ThrowAsJavaScriptException();
     return;
   }
 
-  _receiver = rtpReceiverWrapper->receiver();
   _onpacket.Reset(info[1].As<Napi::Function>());
 
   _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
@@ -93,13 +84,10 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
-  if (_receiver) {
-    webrtc::RtpReceiverInterface* interface_ptr = _receiver.get();
-    // ВИПРАВЛЕННЯ: Використовуємо тип, який підказує компілятор
-    auto* internal_impl = static_cast<webrtc::RtpReceiverProxy*>(interface_ptr);
-    if (internal_impl && internal_impl->media_channel()) {
-      internal_impl->media_channel()->SetRawRtpPacketSink(_sink.get());
-    }
+  // ВИКОРИСТОВУЄМО НАШ НОВИЙ МЕТОД
+  cricket::MediaChannel* channel = rtpReceiverWrapper->media_channel();
+  if (channel) {
+    channel->SetRawRtpPacketSink(_sink.get());
   }
 }
 
@@ -112,14 +100,18 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& /* info */) {
 }
 
 void RtpPacketSinkWrapper::_Stop() {
-  if (_receiver) {
-    webrtc::RtpReceiverInterface* interface_ptr = _receiver.get();
-    // ВИПРАВЛЕННЯ: Використовуємо тип, який підказує компілятор
-    auto* internal_impl = static_cast<webrtc::RtpReceiverProxy*>(interface_ptr);
-    if (internal_impl && internal_impl->media_channel()) {
-      internal_impl->media_channel()->SetRawRtpPacketSink(nullptr);
+  // Перевіряємо, чи є валідне посилання на об'єкт
+  if (!_receiverWrapperRef.IsEmpty()) {
+    auto* rtpReceiverWrapper = node_webrtc::RTCRtpReceiver::Unwrap(_receiverWrapperRef.Value());
+    if (rtpReceiverWrapper) {
+        // ВИКОРИСТОВУЄМО НАШ НОВИЙ МЕТОД
+        cricket::MediaChannel* channel = rtpReceiverWrapper->media_channel();
+        if (channel) {
+            channel->SetRawRtpPacketSink(nullptr);
+        }
     }
-    _receiver = nullptr;
+    // Очищуємо посилання
+    _receiverWrapperRef.Reset();
   }
 
   if (!_onpacket.IsEmpty()) {

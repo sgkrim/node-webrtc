@@ -38,6 +38,7 @@ class RTCRtpReceiver: public AsyncObjectWrap<RTCRtpReceiver> {
 
   static Napi::FunctionReference& constructor();
   rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver() { return _receiver; }
+  cricket::MediaChannel* media_channel();
 
  private:
   static RTCRtpReceiver* Create(

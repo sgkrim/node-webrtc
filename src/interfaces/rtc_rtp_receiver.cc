@@ -29,6 +29,18 @@ Napi::FunctionReference& RTCRtpReceiver::constructor() {
   return constructor;
 }
 
+// РЕАЛІЗАЦІЯ НАШОГО НОВОГО МЕТОДУ
+cricket::MediaChannel* RTCRtpReceiver::media_channel() {
+  // _jingleRtpReceiver - це і є наш проксі
+  auto* interface = _jingleRtpReceiver->internal();
+  if (!interface) {
+    return nullptr;
+  }
+  // Всередині цього файлу ми МОЖЕМО безпечно робити цей cast
+  auto* receiver_impl = static_cast<webrtc::RtpReceiver*>(interface);
+  return receiver_impl->media_channel();
+}
+
 RTCRtpReceiver::RTCRtpReceiver(const Napi::CallbackInfo& info)
   : AsyncObjectWrap<RTCRtpReceiver>("RTCRtpReceiver", info) {
   if (info.Length() != 2 || !info[0].IsObject() || !info[1].IsExternal()) {

@@ -30,6 +30,7 @@ class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
   std::unique_ptr<RtpPacketSink> _sink;
   // Використовуємо FunctionReference замість ThreadSafeFunction
   Napi::FunctionReference _onpacket;
+  Napi::ObjectReference _receiverWrapperRef;
 };
 
 #endif  // RTP_PACKET_SINK_WRAPPER_H_
