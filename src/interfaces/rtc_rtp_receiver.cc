@@ -34,32 +34,27 @@ Napi::FunctionReference& RTCRtpReceiver::constructor() {
 // РЕАЛІЗАЦІЯ НАШОГО НОВОГО МЕТОДУ
 cricket::MediaChannel* RTCRtpReceiver::media_channel() {
   // 1. Отримуємо "сирий" вказівник на базовий інтерфейс.
-  //    Його статичний тип - webrtc::RtpReceiverInterface.
   webrtc::RtpReceiverInterface* base_interface = _receiver.get();
   if (!base_interface) {
     return nullptr;
   }
 
   // 2. Перетворюємо базовий інтерфейс на конкретний клас проксі.
-  //    Цей клас МАЄ метод .internal().
   auto* proxy = static_cast<webrtc::RtpReceiverProxyWithInternal<webrtc::RtpReceiverInterface>*>(base_interface);
   if (!proxy) {
     return nullptr;
   }
 
-  // 3. Викликаємо метод .internal() на проксі, щоб отримати
-  //    вказівник на СПРАВЖНЮ реалізацію.
+  // 3. Викликаємо метод .internal(), щоб отримати вказівник
+  //    на справжню реалізацію.
   auto* internal_interface = proxy->internal();
   if (!internal_interface) {
     return nullptr;
   }
 
-  // 4. І вже цей вказівник на реалізацію ми можемо безпечно
-  //    перетворити на webrtc::RtpReceiver, який МАЄ метод .media_channel().
-  auto* receiver_impl = static_cast<webrtc::RtpReceiver*>(internal_interface);
-  if (!receiver_impl) {
-    return nullptr;
-  }
+  // 4. ОСТАННІЙ КРОК: Використовуємо reinterpret_cast.
+  //    Це єдиний спосіб обійти перевірку типів компілятором.
+  auto* receiver_impl = reinterpret_cast<webrtc::RtpReceiver*>(internal_interface);
 
   // 5. Повертаємо бажаний результат.
   return receiver_impl->media_channel();
