@@ -57,13 +57,20 @@
 namespace node_webrtc {
 
 cricket::MediaChannel* RTCPeerConnection::GetMediaChannel(const std::string& trackId) {
-  if (!_jinglePeerConnection) { // <--- ВИПРАВЛЕНО
+  if (!_jinglePeerConnection) {
     return nullptr;
   }
-  auto* channel_manager = _jinglePeerConnection->channel_manager(); // <--- ВИПРАВЛЕНО
+
+  // 1. ВИКОНУЄМО CAST від інтерфейсу до конкретної реалізації
+  auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
+
+  // 2. Тепер ми можемо безпечно отримати доступ до channel_manager()
+  auto* channel_manager = pc_impl->channel_manager();
   if (!channel_manager) {
     return nullptr;
   }
+
+  // 3. Решта логіки залишається без змін
   if (auto* channel = channel_manager->GetVoiceChannel(trackId)) {
     return channel;
   }
