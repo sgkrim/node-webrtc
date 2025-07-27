@@ -15,6 +15,7 @@
 #include <api/rtp_transceiver_interface.h>
 #include <api/scoped_refptr.h>
 #include <p2p/client/basic_port_allocator.h>
+#include "pc/peer_connection.h"
 
 #include "src/converters.h"
 #include "src/converters/arguments.h"
@@ -61,16 +62,16 @@ cricket::MediaChannel* RTCPeerConnection::GetMediaChannel(const std::string& tra
     return nullptr;
   }
 
-  // 1. ВИКОНУЄМО CAST від інтерфейсу до конкретної реалізації
+  // ВИКОНУЄМО CAST від інтерфейсу до конкретної реалізації
   auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
 
-  // 2. Тепер ми можемо безпечно отримати доступ до channel_manager()
+  // Тепер ми можемо безпечно отримати доступ до channel_manager()
   auto* channel_manager = pc_impl->channel_manager();
   if (!channel_manager) {
     return nullptr;
   }
 
-  // 3. Решта логіки залишається без змін
+  // Решта логіки залишається без змін
   if (auto* channel = channel_manager->GetVoiceChannel(trackId)) {
     return channel;
   }
@@ -79,6 +80,7 @@ cricket::MediaChannel* RTCPeerConnection::GetMediaChannel(const std::string& tra
   }
   return nullptr;
 }
+
 
 Napi::FunctionReference& RTCPeerConnection::constructor() {
   static Napi::FunctionReference constructor;
