@@ -26,7 +26,7 @@ class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
  public:
   static void Init(Napi::Env env, Napi::Object exports);
   RtpPacketSinkWrapper(const Napi::CallbackInfo& info);
-  ~RtpPacketSinkWrapper() override;
+  ~RtpPacketSinkWrapper();
 
  private:
   void Stop(const Napi::CallbackInfo&);
