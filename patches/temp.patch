@@ -1,11 +1,25 @@
+--- a/media/base/media_channel.h
++++ b/media/base/media_channel.h
+@@ -269,6 +269,9 @@
+       uint32_t ssrc,
+       rtc::scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor);
+
++  // Sets a sink for raw RTP packets. This is a virtual method that will be
++  // implemented by derived classes like VoiceMediaChannel and VideoMediaChannel.
++  virtual void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) {}
++
+   // Enable network condition based codec switching.
+   virtual void SetVideoCodecSwitchingEnabled(bool enabled);
+
 --- a/pc/channel_manager.cc
 +++ b/pc/channel_manager.cc
-@@ -250,6 +250,26 @@
+@@ -250,6 +250,28 @@
      }
    }
  }
 +
-+cricket::VoiceChannel* ChannelManager::GetVoiceChannel(
++// Implementation of the new public method to get a voice channel.
++cricket::VoiceMediaChannel* ChannelManager::GetVoiceMediaChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : voice_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -15,7 +29,8 @@
 +  return nullptr;
 +}
 +
-+cricket::VideoChannel* ChannelManager::GetVideoChannel(
++// Implementation of the new public method to get a video channel.
++cricket::VideoMediaChannel* ChannelManager::GetVideoMediaChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : video_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -29,22 +44,24 @@
    switch (msg->message_id) {
 --- a/pc/channel_manager.h
 +++ b/pc/channel_manager.h
-@@ -107,6 +107,9 @@
+@@ -107,6 +107,10 @@
    void DestroyVideoChannel(VideoChannel* video_channel);
    void DestroyRtpDataChannel(RtpDataChannel* data_channel);
 
-+  cricket::VoiceChannel* GetVoiceChannel(const std::string& transport_name);
-+  cricket::VideoChannel* GetVideoChannel(const std::string& transport_name);
++  // New public methods to get channels by transport name (track id).
++  VoiceMediaChannel* GetVoiceMediaChannel(const std::string& transport_name);
++  VideoMediaChannel* GetVideoMediaChannel(const std::string& transport_name);
 +
    // Indicates that the first RTP packet has been received.
    // Used for test purposes.
    sigslot::signal0<> SignalFirstRtpPacketReceived;
 --- a/pc/peer_connection.h
-+++ b/pc/channel_manager.h
++++ b/pc/peer_connection.h
 @@ -120,6 +120,8 @@
        const PeerConnectionInterface::RTCConfiguration& configuration,
        PeerConnectionDependencies dependencies);
 
++  // Make channel_manager() public.
 +  cricket::ChannelManager* channel_manager() const;
 +
    rtc::scoped_refptr<StreamCollectionInterface> local_streams() override;
@@ -59,4 +76,3 @@
    enum class SessionError {
      kNone,       // No error.
      kContent,    // Error in BaseChannel SetLocalContent/SetRemoteContent.
-
