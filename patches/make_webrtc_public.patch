@@ -1,0 +1,27 @@
+diff --git a/pc/peer_connection.h b/pc/peer_connection.h
+index 9065982f00..c21414b93d 100644
+--- a/pc/peer_connection.h
++++ b/pc/peer_connection.h
+@@ -116,10 +116,13 @@ class PeerConnection : public PeerConnectionInternal,
+                           std::unique_ptr<RtcEventLog> event_log,
+                           std::unique_ptr<Call> call);
+ 
++                          
+   bool Initialize(
+       const PeerConnectionInterface::RTCConfiguration& configuration,
+       PeerConnectionDependencies dependencies);
+ 
++  cricket::ChannelManager* channel_manager() const;
++  
+   rtc::scoped_refptr<StreamCollectionInterface> local_streams() override;
+   rtc::scoped_refptr<StreamCollectionInterface> remote_streams() override;
+   bool AddStream(MediaStreamInterface* local_stream) override;
+@@ -926,7 +929,7 @@ class PeerConnection : public PeerConnectionInternal,
+   // Returns RTCError::OK() if there are no issues.
+   RTCError ValidateConfiguration(const RTCConfiguration& config) const;
+ 
+-  cricket::ChannelManager* channel_manager() const;
++
+ 
+   enum class SessionError {
+     kNone,       // No error.
