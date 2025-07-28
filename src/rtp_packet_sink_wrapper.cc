@@ -67,7 +67,6 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  // ВИПРАВЛЕННЯ: Сигнатура лямбди тепер відповідає RtpPacketSink::OnRtpPacketCallback
   _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
     auto* packet_data = new RtpPacketData();
     packet_data->length = length;
@@ -78,7 +77,6 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   });
 
   if (auto* channel = GetMediaChannel()) {
-    // ВИПРАВЛЕННЯ: Патч додав цей метод у базовий клас, тому cast не потрібен
     channel->SetRawRtpPacketSink(_sink.get());
   }
 }
@@ -124,7 +122,6 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
 
   auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
 
-  // Цей рядок компілюється, бо наш патч робить метод публічним
   auto* channel_manager = pc_impl->channel_manager();
   if (!channel_manager) {
     return nullptr;
@@ -137,11 +134,11 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
 
   auto receiver_id = receiver_wrapper->receiver()->id();
 
-  // ВИПРАВЛЕННЯ: Використовуємо правильні назви класів з media_channel.h
+  // ВИПРАВЛЕННЯ: Використовуємо правильні назви методів, які додав наш патч
   if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
-    return channel_manager->GetVoiceMediaChannel(receiver_id);
+    return channel_manager->GetVoiceChannel(receiver_id);
   } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
-    return channel_manager->GetVideoMediaChannel(receiver_id);
+    return channel_manager->GetVideoChannel(receiver_id);
   }
 
   return nullptr;
