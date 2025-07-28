@@ -29,6 +29,8 @@ class RtpTransceiverInterface;
 
 class RtpPacketSinkWrapper;
 
+friend class RtpPacketSinkWrapper;
+
 namespace node_webrtc {
 
 class RTCDataChannel;

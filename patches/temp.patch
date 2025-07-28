@@ -5,7 +5,7 @@
    }
  }
 +
-+VoiceChannel* ChannelManager::GetVoiceChannel(
++cricket::VoiceChannel* ChannelManager::GetVoiceChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : voice_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -15,7 +15,7 @@
 +  return nullptr;
 +}
 +
-+VideoChannel* ChannelManager::GetVideoChannel(
++cricket::VideoChannel* ChannelManager::GetVideoChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : video_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -33,14 +33,14 @@
    void DestroyVideoChannel(VideoChannel* video_channel);
    void DestroyRtpDataChannel(RtpDataChannel* data_channel);
 
-+  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
-+  VideoChannel* GetVideoChannel(const std::string& transport_name);
++  cricket::VoiceChannel* GetVoiceChannel(const std::string& transport_name);
++  cricket::VideoChannel* GetVideoChannel(const std::string& transport_name);
 +
    // Indicates that the first RTP packet has been received.
    // Used for test purposes.
    sigslot::signal0<> SignalFirstRtpPacketReceived;
 --- a/pc/peer_connection.h
-+++ b/pc/peer_connection.h
++++ b/pc/channel_manager.h
 @@ -120,6 +120,8 @@
        const PeerConnectionInterface::RTCConfiguration& configuration,
        PeerConnectionDependencies dependencies);

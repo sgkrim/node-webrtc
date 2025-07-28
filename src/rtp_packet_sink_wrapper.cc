@@ -5,11 +5,16 @@
 #include "src/interfaces/media_stream_track.h"
 #include "rtp_packet_sink.h"
 
-// Завдяки патчам ці файли тепер доступні і працюють
+// Патчі роблять ці файли доступними і робочими
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
 #include "media/base/media_channel.h"
 #include "api/rtp_receiver_interface.h"
+
+// ВИРІШЕННЯ ПОМИЛКИ "cannot convert": додаємо повні визначення
+#include "media/base/voice_channel.h"
+#include "media/base/video_channel.h"
+
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
@@ -65,19 +70,23 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  // ВИПРАВЛЕНО: Сигнатура лямбди тепер відповідає очікуванням RtpPacketSink
-  _sink = std::make_unique<RtpPacketSink>([this](const webrtc::RtpPacketReceived& packet) {
+  // ВИРІШЕННЯ ПОМИЛКИ "no matching function": виправляємо сигнатуру лямбди
+  _sink = std::make_unique<RtpPacketSink>([this](const unsigned char* data, size_t length, unsigned int timestamp) {
     auto* packet_data = new RtpPacketData();
-    packet_data->length = packet.size();
-    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
-    memcpy(packet_data->data.get(), packet.data(), packet.size());
-    packet_data->timestamp = packet.Timestamp();
+    packet_data->length = length;
+    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[length]);
+    memcpy(packet_data->data.get(), data, length);
+    packet_data->timestamp = timestamp;
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
   if (auto* channel = GetMediaChannel()) {
-    // ВИПРАВЛЕНО: Правильний метод - це SetRtpPacketSink
-    channel->SetRtpPacketSink(_sink.get());
+    // ВИРІШЕННЯ ПОМИЛКИ "has no member": робимо dynamic_cast
+    if (auto* voice_channel = dynamic_cast<cricket::VoiceChannel*>(channel)) {
+        voice_channel->SetRawRtpPacketSink(_sink.get());
+    } else if (auto* video_channel = dynamic_cast<cricket::VideoChannel*>(channel)) {
+        video_channel->SetRawRtpPacketSink(_sink.get());
+    }
   }
 }
 
@@ -88,8 +97,11 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
     if (auto* channel = GetMediaChannel()) {
-      // ВИПРАВЛЕНО: Для видалення передаємо nullptr.
-      channel->SetRtpPacketSink(nullptr);
+        if (auto* voice_channel = dynamic_cast<cricket::VoiceChannel*>(channel)) {
+            voice_channel->SetRawRtpPacketSink(nullptr);
+        } else if (auto* video_channel = dynamic_cast<cricket::VideoChannel*>(channel)) {
+            video_channel->SetRawRtpPacketSink(nullptr);
+        }
     }
     _sink.reset();
   }
@@ -114,7 +126,9 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // Завдяки "дружбі" ми можемо отримати доступ до _jinglePeerConnection
+  // ВАЖЛИВО: Цей рядок компілюється, ТІЛЬКИ ЯКЩО ви додали
+  // `friend class RtpPacketSinkWrapper;`
+  // у файл `src/interfaces/rtc_peer_connection.h`
   webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->_jinglePeerConnection.get();
   if (!pc_interface) {
     return nullptr;
@@ -122,7 +136,8 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
 
   auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
 
-  // Завдяки ПАТЧУ №1 цей виклик тепер коректний
+  // ВАЖЛИВО: Цей рядок компілюється, ТІЛЬКИ ЯКЩО ваш патч
+  // успішно застосувався і зробив цей метод публічним.
   auto* channel_manager = pc_impl->channel_manager();
   if (!channel_manager) {
     return nullptr;
@@ -133,7 +148,8 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // Завдяки ПАТЧУ №2 ці методи тепер існують і є публічними
+  // ВАЖЛИВО: Цей рядок компілюється, ТІЛЬКИ ЯКЩО ваш патч
+  // успішно застосувався і додав ці методи.
   if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
     return channel_manager->GetVoiceChannel(receiver_wrapper->receiver()->id());
   } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
