@@ -1,12 +1,11 @@
-diff --git a/pc/channel_manager.cc b/pc/channel_manager.cc
-index 16814bd493..a1a1b2ea38 100644
 --- a/pc/channel_manager.cc
 +++ b/pc/channel_manager.cc
-@@ -262,6 +262,26 @@ VideoChannel* ChannelManager::CreateVideoChannel(
-     });
+@@ -250,6 +250,26 @@
+     }
    }
- 
-+  VoiceChannel* ChannelManager::GetVoiceChannel(
+ }
++
++VoiceChannel* ChannelManager::GetVoiceChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : voice_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -25,44 +24,39 @@ index 16814bd493..a1a1b2ea38 100644
 +  }
 +  return nullptr;
 +}
-+
-   RTC_DCHECK_RUN_ON(worker_thread_);
-   RTC_DCHECK(initialized_);
-   RTC_DCHECK(call);
-diff --git a/pc/channel_manager.h b/pc/channel_manager.h
-index f66ad4bfc1..db038bd076 100644
+
+ void ChannelManager::OnMessage(rtc::Message* msg) {
+   switch (msg->message_id) {
 --- a/pc/channel_manager.h
 +++ b/pc/channel_manager.h
-@@ -107,6 +107,10 @@ class ChannelManager final {
-   // Destroys a voice channel created by CreateVoiceChannel.
-   void DestroyVoiceChannel(VoiceChannel* voice_channel);
- 
+@@ -107,6 +107,9 @@
+   void DestroyVideoChannel(VideoChannel* video_channel);
+   void DestroyRtpDataChannel(RtpDataChannel* data_channel);
+
 +  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
 +  VideoChannel* GetVideoChannel(const std::string& transport_name);
 +
-+
-   // Creates a video channel, synced with the specified voice channel, and
-   // associated with the specified session.
-   // Version of the above that takes PacketTransportInternal.
-diff --git a/pc/peer_connection.h b/pc/peer_connection.h
-index 9065982f00..955780a107 100644
+   // Indicates that the first RTP packet has been received.
+   // Used for test purposes.
+   sigslot::signal0<> SignalFirstRtpPacketReceived;
 --- a/pc/peer_connection.h
 +++ b/pc/peer_connection.h
-@@ -120,6 +120,8 @@ class PeerConnection : public PeerConnectionInternal,
+@@ -120,6 +120,8 @@
        const PeerConnectionInterface::RTCConfiguration& configuration,
        PeerConnectionDependencies dependencies);
- 
+
 +  cricket::ChannelManager* channel_manager() const;
 +
    rtc::scoped_refptr<StreamCollectionInterface> local_streams() override;
    rtc::scoped_refptr<StreamCollectionInterface> remote_streams() override;
    bool AddStream(MediaStreamInterface* local_stream) override;
-@@ -926,8 +928,6 @@ class PeerConnection : public PeerConnectionInternal,
+@@ -926,8 +928,6 @@
    // Returns RTCError::OK() if there are no issues.
    RTCError ValidateConfiguration(const RTCConfiguration& config) const;
- 
+
 -  cricket::ChannelManager* channel_manager() const;
 -
    enum class SessionError {
      kNone,       // No error.
      kContent,    // Error in BaseChannel SetLocalContent/SetRemoteContent.
+
