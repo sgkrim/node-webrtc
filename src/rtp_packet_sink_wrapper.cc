@@ -5,13 +5,11 @@
 #include "src/interfaces/media_stream_track.h"
 #include "rtp_packet_sink.h"
 
-// Включаємо файли, які тепер доступні і потрібні нам
+// Патчі роблять ці файли доступними і робочими
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
-// Включаємо цей файл, бо він містить визначення VoiceMediaChannel та VideoMediaChannel
 #include "media/base/media_channel.h"
-
-#include "api/media_stream_interface.h"
+#include "api/rtp_receiver_interface.h"
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
@@ -67,7 +65,8 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
+  // ВИРІШЕННЯ ПОМИЛКИ "no matching function": виправляємо сигнатуру лямбди
+  _sink = std::make_unique<RtpPacketSink>([this](const unsigned char* data, size_t length, unsigned int timestamp) {
     auto* packet_data = new RtpPacketData();
     packet_data->length = length;
     packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[length]);
@@ -77,6 +76,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   });
 
   if (auto* channel = GetMediaChannel()) {
+    // Тепер цей виклик коректний, бо патч додав метод в базовий клас
     channel->SetRawRtpPacketSink(_sink.get());
   }
 }
@@ -88,7 +88,7 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
     if (auto* channel = GetMediaChannel()) {
-      channel->SetRawRtpPacketSink(nullptr);
+        channel->SetRawRtpPacketSink(nullptr);
     }
     _sink.reset();
   }
@@ -122,6 +122,7 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
 
   auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
 
+  // Цей рядок компілюється, бо наш патч робить метод публічним
   auto* channel_manager = pc_impl->channel_manager();
   if (!channel_manager) {
     return nullptr;
@@ -132,13 +133,11 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  auto receiver_id = receiver_wrapper->receiver()->id();
-
-  // ВИПРАВЛЕННЯ: Використовуємо правильні назви методів, які додав наш патч
+  // Ці рядки компілюються, бо наш патч додає ці методи
   if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
-    return channel_manager->GetVoiceChannel*(receiver_id);
+    return channel_manager->GetVoiceChannel(receiver_wrapper->receiver()->id());
   } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
-    return channel_manager->GetVideoChannel*(receiver_id);
+    return channel_manager->GetVideoChannel(receiver_wrapper->receiver()->id());
   }
 
   return nullptr;
