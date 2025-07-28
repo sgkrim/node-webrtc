@@ -1,0 +1,62 @@
+--- a/pc/channel_manager.cc
++++ b/pc/channel_manager.cc
+@@ -250,6 +250,26 @@
+     }
+   }
+ }
++
++VoiceChannel* ChannelManager::GetVoiceChannel(
++    const std::string& transport_name) {
++  for (const auto& channel : voice_channels_) {
++    if (channel->transport_name() == transport_name) {
++      return channel.get();
++    }
++  }
++  return nullptr;
++}
++
++VideoChannel* ChannelManager::GetVideoChannel(
++    const std::string& transport_name) {
++  for (const auto& channel : video_channels_) {
++    if (channel->transport_name() == transport_name) {
++      return channel.get();
++    }
++  }
++  return nullptr;
++}
+
+ void ChannelManager::OnMessage(rtc::Message* msg) {
+   switch (msg->message_id) {
+--- a/pc/channel_manager.h
++++ b/pc/channel_manager.h
+@@ -107,6 +107,9 @@
+   void DestroyVideoChannel(VideoChannel* video_channel);
+   void DestroyRtpDataChannel(RtpDataChannel* data_channel);
+
++  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
++  VideoChannel* GetVideoChannel(const std::string& transport_name);
++
+   // Indicates that the first RTP packet has been received.
+   // Used for test purposes.
+   sigslot::signal0<> SignalFirstRtpPacketReceived;
+--- a/pc/peer_connection.h
++++ b/pc/peer_connection.h
+@@ -120,6 +120,8 @@
+       const PeerConnectionInterface::RTCConfiguration& configuration,
+       PeerConnectionDependencies dependencies);
+
++  cricket::ChannelManager* channel_manager() const;
++
+   rtc::scoped_refptr<StreamCollectionInterface> local_streams() override;
+   rtc::scoped_refptr<StreamCollectionInterface> remote_streams() override;
+   bool AddStream(MediaStreamInterface* local_stream) override;
+@@ -926,8 +928,6 @@
+   // Returns RTCError::OK() if there are no issues.
+   RTCError ValidateConfiguration(const RTCConfiguration& config) const;
+
+-  cricket::ChannelManager* channel_manager() const;
+-
+   enum class SessionError {
+     kNone,       // No error.
+     kContent,    // Error in BaseChannel SetLocalContent/SetRemoteContent.
+
