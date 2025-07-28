@@ -136,9 +136,9 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
 
   // ВИПРАВЛЕННЯ: Використовуємо правильні назви методів, які додав наш патч
   if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
-    return channel_manager->GetVoiceChannel(receiver_id);
+    return channel_manager->GetVoiceChannel*(receiver_id);
   } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
-    return channel_manager->GetVideoChannel(receiver_id);
+    return channel_manager->GetVideoChannel*(receiver_id);
   }
 
   return nullptr;

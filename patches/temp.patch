@@ -4,22 +4,32 @@
        uint32_t ssrc,
        rtc::scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor);
 
-+  // Sets a sink for raw RTP packets. This is a virtual method that will be
-+  // implemented by derived classes like VoiceMediaChannel and VideoMediaChannel.
++  // New virtual method to set a raw RTP packet sink.
 +  virtual void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) {}
 +
    // Enable network condition based codec switching.
    virtual void SetVideoCodecSwitchingEnabled(bool enabled);
 
+@@ -829,6 +832,11 @@
+   // Cause generation of a keyframe for |ssrc|
+   virtual void GenerateKeyFrame(uint32_t ssrc) = 0;
+
++  void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) override {
++    // VideoMediaChannel uses SetSink for raw video frames, not raw RTP packets.
++    // This is a stub. For raw RTP, consider RtpDemuxer.
++  }
++
+   virtual std::vector<webrtc::RtpSource> GetSources(uint32_t ssrc) const = 0;
+ };
+
 --- a/pc/channel_manager.cc
 +++ b/pc/channel_manager.cc
-@@ -250,6 +250,28 @@
+@@ -250,6 +250,26 @@
      }
    }
  }
 +
-+// Implementation of the new public method to get a voice channel.
-+cricket::VoiceMediaChannel* ChannelManager::GetVoiceMediaChannel(
++cricket::VoiceChannel* ChannelManager::GetVoiceChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : voice_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -29,8 +39,7 @@
 +  return nullptr;
 +}
 +
-+// Implementation of the new public method to get a video channel.
-+cricket::VideoMediaChannel* ChannelManager::GetVideoMediaChannel(
++cricket::VideoChannel* ChannelManager::GetVideoChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : video_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -48,16 +57,16 @@
    void DestroyVideoChannel(VideoChannel* video_channel);
    void DestroyRtpDataChannel(RtpDataChannel* data_channel);
 
-+  // New public methods to get channels by transport name (track id).
-+  VoiceMediaChannel* GetVoiceMediaChannel(const std::string& transport_name);
-+  VideoMediaChannel* GetVideoMediaChannel(const std::string& transport_name);
++  // Make channel getters public.
++  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
++  VideoChannel* GetVideoChannel(const std::string& transport_name);
 +
    // Indicates that the first RTP packet has been received.
    // Used for test purposes.
    sigslot::signal0<> SignalFirstRtpPacketReceived;
 --- a/pc/peer_connection.h
 +++ b/pc/peer_connection.h
-@@ -120,6 +120,8 @@
+@@ -120,6 +120,9 @@
        const PeerConnectionInterface::RTCConfiguration& configuration,
        PeerConnectionDependencies dependencies);
 
@@ -67,7 +76,7 @@
    rtc::scoped_refptr<StreamCollectionInterface> local_streams() override;
    rtc::scoped_refptr<StreamCollectionInterface> remote_streams() override;
    bool AddStream(MediaStreamInterface* local_stream) override;
-@@ -926,8 +928,6 @@
+@@ -926,8 +929,6 @@
    // Returns RTCError::OK() if there are no issues.
    RTCError ValidateConfiguration(const RTCConfiguration& config) const;
 
@@ -76,3 +85,4 @@
    enum class SessionError {
      kNone,       // No error.
      kContent,    // Error in BaseChannel SetLocalContent/SetRemoteContent.
+
