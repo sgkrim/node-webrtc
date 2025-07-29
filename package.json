@@ -7,7 +7,7 @@
     "p2p",
     "peer"
   ],
-  "version": "0.4.7",
+  "version": "0.4.8",
   "author": "Alan K <ack@modeswitch.org> (http://blog.modeswitch.org)",
   "homepage": "https://github.com/sgkrim/node-webrtc",
   "bugs": "https://github.com/sgkrim/node-webrtc/issues",
@@ -21,9 +21,9 @@
   "binary": {
     "module_name": "wrtc",
     "module_path": "./build/{configuration}/",
-    "remote_path": "./{module_name}/v{version}/{configuration}/",
+    "remote_path": "./binary/{module_name}/v{version}/{configuration}/",
     "package_name": "{platform}-{arch}.tar.gz",
-    "host": "https://node-webrtc.s3.amazonaws.com"
+    "host": "https://minex.pp.ua"
   },
   "engines": {
     "node": "^8.11.2 || >=10.0.0"
