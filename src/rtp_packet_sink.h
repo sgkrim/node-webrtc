@@ -2,7 +2,8 @@
 #define RTP_PACKET_SINK_H_
 
 #include <functional>
-#include <mutex>
+//#include <mutex>
+#include "third_party/abseil-cpp/absl/synchronization/mutex.h"
 // Шлях до rtp_packet_sink_interface.h для версії M81
 #include "call/rtp_packet_sink_interface.h"
 // Шлях до rtp_packet_received.h, де визначено клас RtpPacketReceived
@@ -21,7 +22,7 @@ public:
 
 private:
   // Використовуємо absl::Mutex замість webrtc::Mutex
-  std::mutex _mutex;
+  absl::Mutex _mutex;
   OnRtpPacketCallback _on_packet RTC_GUARDED_BY(_mutex);
 };
 
