@@ -1,35 +1,33 @@
 --- a/media/base/media_channel.h
 +++ b/media/base/media_channel.h
-@@ -269,6 +269,9 @@
+@@ -62,6 +62,10 @@
+ class VideoFrame;
+ }  // namespace webrtc
+
++namespace webrtc {
++  class RtpPacketSinkInterface;
++}
++
+ namespace cricket {
+
+ class AudioSource;
+@@ -245,6 +249,9 @@
        uint32_t ssrc,
        rtc::scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor);
 
-+  // New virtual method to set a raw RTP packet sink.
++  // Sets a sink for raw RTP packets.
 +  virtual void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) {}
 +
    // Enable network condition based codec switching.
    virtual void SetVideoCodecSwitchingEnabled(bool enabled);
 
-@@ -829,6 +832,11 @@
-   // Cause generation of a keyframe for |ssrc|
-   virtual void GenerateKeyFrame(uint32_t ssrc) = 0;
-
-+  void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) override {
-+    // VideoMediaChannel uses SetSink for raw video frames, not raw RTP packets.
-+    // This is a stub. For raw RTP, consider RtpDemuxer.
-+  }
-+
-   virtual std::vector<webrtc::RtpSource> GetSources(uint32_t ssrc) const = 0;
- };
-
 --- a/pc/channel_manager.cc
 +++ b/pc/channel_manager.cc
-@@ -250,6 +250,26 @@
-     }
-   }
+@@ -45,6 +45,26 @@
+   worker_thread_->Invoke<void>(RTC_FROM_HERE, [&] { media_engine_.reset(); });
  }
-+
-+cricket::VoiceChannel* ChannelManager::GetVoiceChannel(
+
++VoiceChannel* ChannelManager::GetVoiceChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : voice_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -39,7 +37,7 @@
 +  return nullptr;
 +}
 +
-+cricket::VideoChannel* ChannelManager::GetVideoChannel(
++VideoChannel* ChannelManager::GetVideoChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : video_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -48,34 +46,35 @@
 +  }
 +  return nullptr;
 +}
-
- void ChannelManager::OnMessage(rtc::Message* msg) {
-   switch (msg->message_id) {
++
+ bool ChannelManager::SetVideoRtxEnabled(bool enable) {
+   // To be safe, this call is only allowed before initialization. Apps like
+   // Flute only have a singleton ChannelManager and we don't want this flag to
 --- a/pc/channel_manager.h
 +++ b/pc/channel_manager.h
-@@ -107,6 +107,10 @@
-   void DestroyVideoChannel(VideoChannel* video_channel);
-   void DestroyRtpDataChannel(RtpDataChannel* data_channel);
+@@ -88,6 +88,10 @@
+   // Shuts down the media engine.
+   void Terminate();
 
-+  // Make channel getters public.
++  // Getters for existing channels.
 +  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
 +  VideoChannel* GetVideoChannel(const std::string& transport_name);
 +
-   // Indicates that the first RTP packet has been received.
-   // Used for test purposes.
-   sigslot::signal0<> SignalFirstRtpPacketReceived;
+   // The operations below all occur on the worker thread.
+   // ChannelManager retains ownership of the created channels, so clients should
+   // call the appropriate Destroy*Channel method when done.
 --- a/pc/peer_connection.h
 +++ b/pc/peer_connection.h
-@@ -120,6 +120,9 @@
-       const PeerConnectionInterface::RTCConfiguration& configuration,
-       PeerConnectionDependencies dependencies);
+@@ -112,6 +112,9 @@
+     MAX_VALUE = 0x8000,
+   };
 
 +  // Make channel_manager() public.
 +  cricket::ChannelManager* channel_manager() const;
 +
-   rtc::scoped_refptr<StreamCollectionInterface> local_streams() override;
-   rtc::scoped_refptr<StreamCollectionInterface> remote_streams() override;
-   bool AddStream(MediaStreamInterface* local_stream) override;
+   explicit PeerConnection(PeerConnectionFactory* factory,
+                           std::unique_ptr<RtcEventLog> event_log,
+                           std::unique_ptr<Call> call);
 @@ -926,8 +929,6 @@
    // Returns RTCError::OK() if there are no issues.
    RTCError ValidateConfiguration(const RTCConfiguration& config) const;

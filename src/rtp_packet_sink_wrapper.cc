@@ -10,6 +10,7 @@
 #include "pc/channel_manager.h"
 #include "media/base/media_channel.h"
 #include "api/rtp_receiver_interface.h"
+#include "api/media_stream_interface.h"
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
@@ -65,8 +66,8 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  // ВИРІШЕННЯ ПОМИЛКИ "no matching function": виправляємо сигнатуру лямбди
-  _sink = std::make_unique<RtpPacketSink>([this](const unsigned char* data, size_t length, unsigned int timestamp) {
+  // Використовуємо точні типи з вашого rtp_packet_sink.h
+  _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
     auto* packet_data = new RtpPacketData();
     packet_data->length = length;
     packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[length]);
@@ -76,7 +77,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   });
 
   if (auto* channel = GetMediaChannel()) {
-    // Тепер цей виклик коректний, бо патч додав метод в базовий клас
+    // Патч додав цей метод у базовий клас
     channel->SetRawRtpPacketSink(_sink.get());
   }
 }
@@ -113,9 +114,8 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // ВАЖЛИВО: Переконайтесь, що у файлі src/interfaces/rtc_peer_connection.h є:
-  // friend class RtpPacketSinkWrapper;
-  webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->_jinglePeerConnection.get();
+  // Замість прямого доступу до _jinglePeerConnection, ми використовуємо публічний геттер, який є в RTCPeerConnection.
+  webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->pc();
   if (!pc_interface) {
     return nullptr;
   }
@@ -133,11 +133,14 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // Ці рядки компілюються, бо наш патч додає ці методи
+  // Використовуємо transport_name, оскільки це те, за чим ми шукаємо канал
+  auto transport_name = receiver_wrapper->receiver()->id();
+
+  // Робимо явний `static_cast`, бо VoiceChannel/VideoChannel є нащадками MediaChannel
   if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
-    return channel_manager->GetVoiceChannel(receiver_wrapper->receiver()->id());
+    return static_cast<cricket::MediaChannel*>(channel_manager->GetVoiceChannel(transport_name));
   } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
-    return channel_manager->GetVideoChannel(receiver_wrapper->receiver()->id());
+    return static_cast<cricket::MediaChannel*>(channel_manager->GetVideoChannel(transport_name));
   }
 
   return nullptr;
