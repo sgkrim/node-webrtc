@@ -3,7 +3,7 @@
 
 #include <functional>
 //#include <mutex>
-#include "third_party/abseil-cpp/absl/synchronization/mutex.h"
+#include "rtc_base/critical_section.h"
 // Шлях до rtp_packet_sink_interface.h для версії M81
 #include "call/rtp_packet_sink_interface.h"
 // Шлях до rtp_packet_received.h, де визначено клас RtpPacketReceived
@@ -21,9 +21,8 @@ public:
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override;
 
 private:
-  // Використовуємо absl::Mutex замість webrtc::Mutex
-  absl::Mutex _mutex;
-  OnRtpPacketCallback _on_packet RTC_GUARDED_BY(_mutex);
+  rtc::CriticalSection _crit; // <--- ЗМІНЕНО: Використовуємо CriticalSection
+  OnRtpPacketCallback _on_packet RTC_GUARDED_BY(_crit);
 };
 
 #endif  // RTP_PACKET_SINK_H_
