@@ -3,14 +3,12 @@
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
-#include "src/interfaces/rtc_dtls_transport.h"
 
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
 #include "pc/channel.h"
 #include "media/base/media_channel.h"
-#include "api/dtls_transport_interface.h"
-#include "pc/dtls_transport.h" // ДОДАНО ДЛЯ static_cast
+#include "api/rtp_transceiver_interface.h" // ДОДАНО: Для отримання MID
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
@@ -128,17 +126,28 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // ФІНАЛЬНЕ ВИПРАВЛЕННЯ: Виконуємо static_cast до реалізації DtlsTransport
+  // ФІНАЛЬНЕ ВИПРАВЛЕННЯ: Отримуємо MID з трансивера
   auto rtp_receiver = receiver_wrapper->receiver();
-  if (!rtp_receiver || !rtp_receiver->dtls_transport()) {
+  if (!rtp_receiver) {
+    return nullptr;
+  }
+
+  auto transceivers = pc_impl->GetTransceivers();
+  rtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver;
+  for (const auto& t : transceivers) {
+      if (t->receiver() == rtp_receiver) {
+          transceiver = t;
+          break;
+      }
+  }
+
+  if (!transceiver || !transceiver->mid()) {
       return nullptr;
   }
-  auto dtls_transport_interface = rtp_receiver->dtls_transport();
-  auto* dtls_transport_impl =
-      static_cast<webrtc::DtlsTransport*>(dtls_transport_interface.get());
-  auto transport_name = dtls_transport_impl->transport_name();
+  auto transport_name = *transceiver->mid();
 
-  auto receiver_track = receiver_wrapper->receiver()->track();
+
+  auto receiver_track = rtp_receiver->track();
   if (!receiver_track) {
     return nullptr;
   }
