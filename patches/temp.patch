@@ -5,7 +5,7 @@
  }  // namespace webrtc
 
 +namespace webrtc {
-+  class RtpPacketSinkInterface;
++class RtpPacketSinkInterface;
 +}
 +
  namespace cricket {
@@ -23,33 +23,33 @@
 
 --- a/pc/channel_manager.cc
 +++ b/pc/channel_manager.cc
-@@ -2,6 +2,7 @@
-
- #include "pc/channel_manager.h"
-
+@@ -21,6 +21,7 @@
+ #include "rtc_base/logging.h"
+ #include "rtc_base/thread_checker.h"
+ #include "rtc_base/trace_event.h"
 +#include "pc/channel.h"
- #include <utility>
 
- #include "absl/algorithm/container.h"
-@@ -45,26 +46,26 @@
+ namespace cricket {
+
+@@ -45,6 +46,26 @@
    worker_thread_->Invoke<void>(RTC_FROM_HERE, [&] { media_engine_.reset(); });
  }
 
-+MediaChannel* ChannelManager::GetVoiceChannel(
++VoiceChannel* ChannelManager::GetVoiceChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : voice_channels_) {
 +    if (channel->transport_name() == transport_name) {
-+      return static_cast<MediaChannel*>(channel.get());
++      return channel.get();
 +    }
 +  }
 +  return nullptr;
 +}
 +
-+MediaChannel* ChannelManager::GetVideoChannel(
++VideoChannel* ChannelManager::GetVideoChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : video_channels_) {
 +    if (channel->transport_name() == transport_name) {
-+      return static_cast<MediaChannel*>(channel.get());
++      return channel.get();
 +    }
 +  }
 +  return nullptr;
@@ -60,35 +60,35 @@
    // Flute only have a singleton ChannelManager and we don't want this flag to
 --- a/pc/channel_manager.h
 +++ b/pc/channel_manager.h
-@@ -88,9 +88,9 @@
+@@ -88,6 +88,9 @@
    // Shuts down the media engine.
    void Terminate();
 
--  // The operations below all occur on the worker thread.
--  // ChannelManager retains ownership of the created channels, so clients should
-+  // Getters for existing channels, returning the base MediaChannel type.
-+  MediaChannel* GetVoiceChannel(const std::string& transport_name);
-+  MediaChannel* GetVideoChannel(const std::string& transport_name);
++  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
++  VideoChannel* GetVideoChannel(const std::string& transport_name);
 +
+   // The operations below all occur on the worker thread.
+   // ChannelManager retains ownership of the created channels, so clients should
    // call the appropriate Destroy*Channel method when done.
-   VoiceChannel* CreateVoiceChannel(
-       webrtc::Call* call, const cricket::MediaConfig& media_config,
 --- a/pc/peer_connection.h
 +++ b/pc/peer_connection.h
-@@ -112,6 +112,8 @@
+@@ -112,6 +112,9 @@
      MAX_VALUE = 0x80000,
    };
 
++  webrtc::PeerConnectionInterface* pc() { return this; }
 +  cricket::ChannelManager* channel_manager() const;
 +
    explicit PeerConnection(PeerConnectionFactory* factory,
-                           std::unique_ptr<RtpEventLog> event_log,
+                           std::unique_ptr<RtcEventLog> event_log,
                            std::unique_ptr<Call> call);
-@@ -926,7 +928,6 @@
+@@ -926,8 +929,6 @@
    // Returns RTCError::OK() if there are no issues.
    RTCError ValidateConfiguration(const RTCConfiguration& config) const;
 
 -  cricket::ChannelManager* channel_manager() const;
-
+-
    enum class SessionError {
      kNone,       // No error.
+     kContent,    // Error in BaseChannel SetLocalContent/SetRemoteContent.
+

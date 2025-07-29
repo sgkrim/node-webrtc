@@ -3,14 +3,12 @@
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
-#include "rtp_packet_sink.h"
+#include "src/interfaces/rtc_dtls_transport.h"
 
-// Патчі роблять ці файли доступними і робочими
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
+#include "pc/channel.h"
 #include "media/base/media_channel.h"
-#include "api/rtp_receiver_interface.h"
-#include "api/media_stream_interface.h"
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
@@ -38,21 +36,25 @@ class OnPacketWorker : public Napi::AsyncWorker {
 Napi::FunctionReference RtpPacketSinkWrapper::audio_constructor;
 Napi::FunctionReference RtpPacketSinkWrapper::video_constructor;
 
-void RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
+Napi::Object RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function audio_func = DefineClass(env, "RTCRawAudioSink", {
     InstanceMethod("stop", &RtpPacketSinkWrapper::Stop)
   });
   audio_constructor = Napi::Persistent(audio_func);
   audio_constructor.SuppressDestruct();
+
   Napi::Function video_func = DefineClass(env, "RTCRawVideoSink", {
     InstanceMethod("stop", &RtpPacketSinkWrapper::Stop)
   });
   video_constructor = Napi::Persistent(video_func);
   video_constructor.SuppressDestruct();
+
   Napi::Object nonstandard = Napi::Object::New(env);
   nonstandard.Set("RTCRawAudioSink", audio_func);
   nonstandard.Set("RTCRawVideoSink", video_func);
   exports.Set("nonstandard", nonstandard);
+
+  return exports;
 }
 
 RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
@@ -76,7 +78,6 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   });
 
   if (auto* channel = GetMediaChannel()) {
-    // Патч додав цей метод у базовий клас
     channel->SetRawRtpPacketSink(_sink.get());
   }
 }
@@ -88,7 +89,7 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
     if (auto* channel = GetMediaChannel()) {
-        channel->SetRawRtpPacketSink(nullptr);
+      channel->SetRawRtpPacketSink(nullptr);
     }
     _sink.reset();
   }
@@ -106,14 +107,13 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  auto* pc_wrapper = node_webretc::RTCPeerConnection::Unwrap(_pcRef.Value());
+  auto* pc_wrapper = node_webrtc::RTCPeerConnection::Unwrap(_pcRef.Value());
   auto* receiver_wrapper = node_webrtc::RTCRtpReceiver::Unwrap(_receiverRef.Value());
 
   if (!pc_wrapper || !receiver_wrapper) {
     return nullptr;
   }
 
-  // Використовуємо публічний геттер, який ми додали за допомогою патчу
   webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->pc();
   if (!pc_interface) {
     return nullptr;
@@ -121,24 +121,28 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
 
   auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
 
-  // Цей рядок компілюється, бо наш патч робить метод публічним
   auto* channel_manager = pc_impl->channel_manager();
   if (!channel_manager) {
     return nullptr;
   }
+
+  auto* transport_wrapper = receiver_wrapper->GetTransport(Env()).As<Napi::Object>().Unwrap<node_webrtc::RTCDtlsTransport>();
+  if(!transport_wrapper) {
+      return nullptr;
+  }
+  auto transport_name = transport_wrapper->transport()->transport_name();
 
   auto receiver_track = receiver_wrapper->receiver()->track();
   if (!receiver_track) {
     return nullptr;
   }
 
-  auto transport_name = receiver_wrapper->receiver()->id();
-
-  // Нам більше не потрібен cast, бо Get...Channel повертає MediaChannel*
-  if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
-    return channel_manager->GetVoiceChannel(transport_name);
-  } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
-    return channel_manager->GetVideoChannel(transport_name);
+  if (std::string(receiver_track->kind()) == webrtc::MediaStreamTrackInterface::kAudioKind) {
+    auto* voice_channel = channel_manager->GetVoiceChannel(transport_name);
+    return voice_channel ? voice_channel->media_channel() : nullptr;
+  } else if (std::string(receiver_track->kind()) == webrtc::MediaStreamTrackInterface::kVideoKind) {
+    auto* video_channel = channel_manager->GetVideoChannel(transport_name);
+    return video_channel ? video_channel->media_channel() : nullptr;
   }
 
   return nullptr;

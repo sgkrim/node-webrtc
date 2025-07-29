@@ -1,29 +1,34 @@
-#pragma once
+#ifndef RTP_PACKET_SINK_WRAPPER_H_
+#define RTP_PACKET_SINK_WRAPPER_H_
 
 #include <memory>
+#include <string>
 
 #include <node-addon-api/napi.h>
 
-// Попередні оголошення
+#include "rtp_packet_sink.h"
+
+// Попередні оголошення для типів з WebRTC та нашого проєкту
 namespace cricket {
 class MediaChannel;
 }
 
-namespace webrtc {
-class RtpPacketSinkInterface;
+namespace node_webrtc {
+class RTCPeerConnection;
+class RTCRtpReceiver;
 }
 
 // Структура для передачі даних між потоками
 struct RtpPacketData {
-  std::unique_ptr<uint8_t[]> data;
   size_t length;
   uint32_t timestamp;
+  std::unique_ptr<uint8_t[]> data;
 };
 
 class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
  public:
-  static void Init(Napi::Env env, Napi::Object exports);
-  explicit RtpPacketSinkWrapper(const Napi::CallbackInfo& info);
+  static Napi::Object Init(Napi::Env env, Napi::Object exports);
+  RtpPacketSinkWrapper(const Napi::CallbackInfo& info);
   ~RtpPacketSinkWrapper() override;
 
  private:
@@ -37,6 +42,7 @@ class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
   Napi::ObjectReference _pcRef;
   Napi::ObjectReference _receiverRef;
   Napi::FunctionReference _onpacket;
-
-  std::unique_ptr<webrtc::RtpPacketSinkInterface> _sink;
+  std::unique_ptr<RtpPacketSink> _sink;
 };
+
+#endif  // RTP_PACKET_SINK_WRAPPER_H_
