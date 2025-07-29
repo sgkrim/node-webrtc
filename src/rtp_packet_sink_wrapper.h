@@ -6,16 +6,17 @@
 
 #include <node-addon-api/napi.h>
 
+#include "rtp_packet_sink.h"
+
 // Попередні оголошення
 namespace cricket {
 class MediaChannel;
 }
 
-namespace webrtc {
-class RtpPacketSinkInterface;
+namespace node_webrtc {
+class RTCPeerConnection;
+class RTCRtpReceiver;
 }
-
-class RtpPacketSink;
 
 // Структура для передачі даних між потоками
 struct RtpPacketData {
@@ -41,8 +42,8 @@ class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
   Napi::ObjectReference _pcRef;
   Napi::ObjectReference _receiverRef;
 
-  // ВИПРАВЛЕНО: Використовуємо ThreadSafeFunction для безпеки потоків
-  Napi::ThreadSafeFunction _onpacket;
+  // ВИПРАВЛЕНО: Повертаємось до FunctionReference, сумісного зі старою N-API
+  Napi::FunctionReference _onpacket;
 
   std::unique_ptr<RtpPacketSink> _sink;
 };

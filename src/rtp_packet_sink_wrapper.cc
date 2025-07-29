@@ -3,7 +3,6 @@
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
-#include "rtp_packet_sink.h"
 
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
@@ -11,24 +10,29 @@
 #include "media/base/media_channel.h"
 #include "api/rtp_transceiver_interface.h"
 
-// Ця функція буде викликана в потоці Node.js для безпечної передачі даних
-static void CallJs(Napi::Env env, Napi::Function js_callback, RtpPacketData* data) {
-  if (env == nullptr || js_callback == nullptr || data == nullptr) {
-    delete data;
-    return;
+// ВИПРАВЛЕНО: Повертаємо реалізацію через AsyncWorker
+class OnPacketWorker : public Napi::AsyncWorker {
+ public:
+  OnPacketWorker(const Napi::Function& callback, RtpPacketData* data)
+    : Napi::AsyncWorker(callback), _data(data) {}
+  ~OnPacketWorker() override = default;
+  void Execute() override {}
+  void OnOK() override {
+    Napi::HandleScope scope(Env());
+    Napi::Object packet_obj = Napi::Object::New(Env());
+    packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(
+      Env(),
+      _data->data.release(),
+      _data->length,
+      [](Napi::Env, uint8_t* d) { delete[] d; }
+    ));
+    packet_obj.Set("timestamp", Napi::Number::New(Env(), _data->timestamp));
+    Callback().Call({packet_obj});
+    delete _data;
   }
-  Napi::HandleScope scope(env);
-  Napi::Object packet_obj = Napi::Object::New(env);
-  packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(
-    env,
-    data->data.release(),
-    data->length,
-    [](Napi::Env, uint8_t* d) { delete[] d; }
-  ));
-  packet_obj.Set("timestamp", Napi::Number::New(env, data->timestamp));
-  js_callback.Call({packet_obj});
-  delete data;
-}
+ private:
+  RtpPacketData* _data;
+};
 
 Napi::FunctionReference RtpPacketSinkWrapper::audio_constructor;
 Napi::FunctionReference RtpPacketSinkWrapper::video_constructor;
@@ -63,15 +67,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
 
   _pcRef = Napi::Persistent(info[0].As<Napi::Object>());
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
-
-  auto js_callback = info[2].As<Napi::Function>();
-  _onpacket = Napi::ThreadSafeFunction::New(
-      info.Env(),
-      js_callback,
-      "RtpPacketSinkCallback",
-      0,
-      1
-  );
+  _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
   // ВИПРАВЛЕНО: Лямбда тепер відповідає оновленому RtpPacketSink
   _sink = std::make_unique<RtpPacketSink>([this](const webrtc::RtpPacketReceived& packet) {
@@ -81,11 +77,8 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     memcpy(packet_data->data.get(), packet.data(), packet.size());
     packet_data->timestamp = packet.Timestamp();
 
-    // Безпечно передаємо дані в потік Node.js через ThreadSafeFunction
-    napi_status status = _onpacket.BlockingCall(packet_data, CallJs);
-    if (status != napi_ok) {
-        delete packet_data;
-    }
+    // Створюємо та запускаємо AsyncWorker
+    (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
   if (auto* channel = GetMediaChannel()) {
@@ -104,10 +97,7 @@ void RtpPacketSinkWrapper::_Stop() {
     }
     _sink.reset();
   }
-  if (_onpacket) {
-    _onpacket.Release();
-    _onpacket = nullptr;
-  }
+  if (!_onpacket.IsEmpty()) _onpacket.Reset();
   if (!_pcRef.IsEmpty()) _pcRef.Reset();
   if (!_receiverRef.IsEmpty()) _receiverRef.Reset();
 }
