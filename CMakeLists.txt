@@ -355,8 +355,10 @@ target_include_directories(${MODULE} PRIVATE
 
 target_link_libraries(${MODULE} PRIVATE
   ${CMAKE_THREAD_LIBS_INIT}
+  -Wl,--whole-archive
   libpeerconnection
   libwebrtc
+  -Wl,--no-whole-archive
   ${libwebrtc_binary_dir}/obj/third_party/abseil-cpp/absl/synchronization/libabsl_synchronization.a
 )
 
