@@ -114,8 +114,8 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
   }
 
   // --- ФІНАЛЬНЕ ВИПРАВЛЕННЯ ---
-  // Використовуємо прямий доступ до приватного поля, який нам надає `friend class`
-  webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->_jinglePeerConnection.get();
+  // Використовуємо публічний геттер, який ми додали до RTCPeerConnection
+  webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->pc();
   if (!pc_interface) {
     return nullptr;
   }

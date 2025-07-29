@@ -68,6 +68,9 @@ class RTCPeerConnection
 
   void SaveLastSdp(const RTCSessionDescriptionInit& lastSdp);
 
+// VVV ДОДАЙТЕ ЦЕЙ НОВИЙ МЕТОД VVV
+  webrtc::PeerConnectionInterface* pc() { return _jinglePeerConnection.get(); }
+
  private:
   friend class RtpPacketSinkWrapper; // <--- ДОДАЙТЕ ЦЕЙ РЯДОК
   Napi::Value AddTrack(const Napi::CallbackInfo&);
