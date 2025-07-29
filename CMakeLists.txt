@@ -357,6 +357,7 @@ target_link_libraries(${MODULE} PRIVATE
   ${CMAKE_THREAD_LIBS_INIT}
   libpeerconnection
   libwebrtc
+  ${libwebrtc_binary_dir}/obj/third_party/abseil-cpp/absl/synchronization/libabsl_synchronization.a
 )
 
 target_compile_definitions(${MODULE} PRIVATE

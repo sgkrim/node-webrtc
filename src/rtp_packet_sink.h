@@ -19,7 +19,7 @@ public:
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override;
 
 private:
-  rtc::CriticalSection _crit; // <--- ЗМІНЕНО: Використовуємо CriticalSection
+  rtc::CriticalSection _crit;
   OnRtpPacketCallback _on_packet;
 };
 
