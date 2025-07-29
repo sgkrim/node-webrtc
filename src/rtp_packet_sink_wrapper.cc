@@ -10,6 +10,7 @@
 #include "pc/channel.h"
 #include "media/base/media_channel.h"
 #include "api/dtls_transport_interface.h"
+#include "pc/dtls_transport.h" // ДОДАНО ДЛЯ static_cast
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
@@ -127,12 +128,15 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // ВИПРАВЛЕНО: Використовуємо внутрішній C++ API для отримання транспорту
+  // ФІНАЛЬНЕ ВИПРАВЛЕННЯ: Виконуємо static_cast до реалізації DtlsTransport
   auto rtp_receiver = receiver_wrapper->receiver();
   if (!rtp_receiver || !rtp_receiver->dtls_transport()) {
       return nullptr;
   }
-  auto transport_name = rtp_receiver->dtls_transport()->transport_name();
+  auto dtls_transport_interface = rtp_receiver->dtls_transport();
+  auto* dtls_transport_impl =
+      static_cast<webrtc::DtlsTransport*>(dtls_transport_interface.get());
+  auto transport_name = dtls_transport_impl->transport_name();
 
   auto receiver_track = receiver_wrapper->receiver()->track();
   if (!receiver_track) {
