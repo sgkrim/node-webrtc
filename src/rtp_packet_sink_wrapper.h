@@ -1,12 +1,10 @@
-#ifndef RTP_PACKET_SINK_WRAPPER_H_
-#define RTP_PACKET_SINK_WRAPPER_H_
+#pragma once
 
 #include <memory>
 
 #include <node-addon-api/napi.h>
-#include "api/rtp_receiver_interface.h"
 
-// Попередні оголошення, щоб не включати зайві заголовки
+// Попередні оголошення
 namespace cricket {
 class MediaChannel;
 }
@@ -25,8 +23,8 @@ struct RtpPacketData {
 class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
  public:
   static void Init(Napi::Env env, Napi::Object exports);
-  RtpPacketSinkWrapper(const Napi::CallbackInfo& info);
-  ~RtpPacketSinkWrapper();
+  explicit RtpPacketSinkWrapper(const Napi::CallbackInfo& info);
+  ~RtpPacketSinkWrapper() override;
 
  private:
   void Stop(const Napi::CallbackInfo&);
@@ -42,5 +40,3 @@ class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
 
   std::unique_ptr<webrtc::RtpPacketSinkInterface> _sink;
 };
-
-#endif  // RTP_PACKET_SINK_WRAPPER_H_

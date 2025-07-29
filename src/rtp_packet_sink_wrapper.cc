@@ -106,15 +106,14 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  auto* pc_wrapper = node_webrtc::RTCPeerConnection::Unwrap(_pcRef.Value());
+  auto* pc_wrapper = node_webretc::RTCPeerConnection::Unwrap(_pcRef.Value());
   auto* receiver_wrapper = node_webrtc::RTCRtpReceiver::Unwrap(_receiverRef.Value());
 
   if (!pc_wrapper || !receiver_wrapper) {
     return nullptr;
   }
 
-  // --- ФІНАЛЬНЕ ВИПРАВЛЕННЯ ---
-  // Використовуємо публічний геттер, який ми додали до RTCPeerConnection
+  // Використовуємо публічний геттер, який ми додали за допомогою патчу
   webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->pc();
   if (!pc_interface) {
     return nullptr;
