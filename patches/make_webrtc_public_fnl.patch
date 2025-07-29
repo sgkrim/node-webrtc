@@ -1,5 +1,5 @@
 diff --git a/media/base/media_channel.h b/media/base/media_channel.h
-index fb52168586..0d6a14a3a0 100644
+index fb52168586..2424923468 100644
 --- a/media/base/media_channel.h
 +++ b/media/base/media_channel.h
 @@ -62,6 +62,11 @@ class AudioSinkInterface;
@@ -26,30 +26,11 @@ index fb52168586..0d6a14a3a0 100644
    // Enable network condition based codec switching.
    virtual void SetVideoCodecSwitchingEnabled(bool enabled);
  
-@@ -840,6 +850,12 @@ class VoiceMediaChannel : public MediaChannel, public Delayable {
-   virtual void SetDefaultRawAudioSink(
-       std::unique_ptr<webrtc::AudioSinkInterface> sink) = 0;
- 
-+  void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) override {
-+    // VideoMediaChannel uses SetSink for raw video frames, not raw RTP packets.
-+    // This is a stub. For raw RTP, consider RtpDemuxer.
-+  }
-+
-+
-   virtual std::vector<webrtc::RtpSource> GetSources(uint32_t ssrc) const = 0;
- };
- 
 diff --git a/pc/channel_manager.cc b/pc/channel_manager.cc
-index 16814bd493..3c36b7c3d6 100644
+index 16814bd493..a5722f1e82 100644
 --- a/pc/channel_manager.cc
 +++ b/pc/channel_manager.cc
-@@ -16,11 +16,13 @@
- #include "absl/memory/memory.h"
- #include "absl/strings/match.h"
- #include "media/base/media_constants.h"
-+#include "media/base/media_channel.h"
- #include "rtc_base/checks.h"
- #include "rtc_base/location.h"
+@@ -21,6 +21,7 @@
  #include "rtc_base/logging.h"
  #include "rtc_base/thread_checker.h"
  #include "rtc_base/trace_event.h"
@@ -57,7 +38,7 @@ index 16814bd493..3c36b7c3d6 100644
  
  namespace cricket {
  
-@@ -39,6 +41,7 @@ ChannelManager::ChannelManager(
+@@ -39,6 +40,7 @@ ChannelManager::ChannelManager(
    RTC_DCHECK(network_thread_);
  }
  
@@ -65,7 +46,7 @@ index 16814bd493..3c36b7c3d6 100644
  ChannelManager::~ChannelManager() {
    if (initialized_) {
      Terminate();
-@@ -48,6 +51,27 @@ ChannelManager::~ChannelManager() {
+@@ -48,6 +50,28 @@ ChannelManager::~ChannelManager() {
    worker_thread_->Invoke<void>(RTC_FROM_HERE, [&] { media_engine_.reset(); });
  }
  
@@ -90,20 +71,22 @@ index 16814bd493..3c36b7c3d6 100644
 +}
 +
 +
++
  bool ChannelManager::SetVideoRtxEnabled(bool enable) {
    // To be safe, this call is only allowed before initialization. Apps like
    // Flute only have a singleton ChannelManager and we don't want this flag to
 diff --git a/pc/channel_manager.h b/pc/channel_manager.h
-index f66ad4bfc1..5616a9d3b7 100644
+index f66ad4bfc1..9a1f90e670 100644
 --- a/pc/channel_manager.h
 +++ b/pc/channel_manager.h
-@@ -88,6 +88,9 @@ class ChannelManager final {
+@@ -88,6 +88,10 @@ class ChannelManager final {
    // Shuts down the media engine.
    void Terminate();
  
++  // Getters for existing channels, returning the base MediaChannel type.
 +  MediaChannel* GetVoiceChannel(const std::string& transport_name);
 +  MediaChannel* GetVideoChannel(const std::string& transport_name);
-+
++  
    // The operations below all occur on the worker thread.
    // ChannelManager retains ownership of the created channels, so clients should
    // call the appropriate Destroy*Channel method when done.
