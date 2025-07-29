@@ -3,35 +3,32 @@
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
+#include "rtp_packet_sink.h"
 
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
 #include "pc/channel.h"
 #include "media/base/media_channel.h"
-#include "api/rtp_transceiver_interface.h" // ДОДАНО: Для отримання MID
+#include "api/rtp_transceiver_interface.h"
 
-class OnPacketWorker : public Napi::AsyncWorker {
- public:
-  OnPacketWorker(const Napi::Function& callback, RtpPacketData* data)
-    : Napi::AsyncWorker(callback), _data(data) {}
-  ~OnPacketWorker() override = default;
-  void Execute() override {}
-  void OnOK() override {
-    Napi::HandleScope scope(Env());
-    Napi::Object packet_obj = Napi::Object::New(Env());
-    packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(
-      Env(),
-      _data->data.release(),
-      _data->length,
-      [](Napi::Env, uint8_t* d) { delete[] d; }
-    ));
-    packet_obj.Set("timestamp", Napi::Number::New(Env(), _data->timestamp));
-    Callback().Call({packet_obj});
-    delete _data;
+// Ця функція буде викликана в потоці Node.js для безпечної передачі даних
+static void CallJs(Napi::Env env, Napi::Function js_callback, RtpPacketData* data) {
+  if (env == nullptr || js_callback == nullptr || data == nullptr) {
+    delete data;
+    return;
   }
- private:
-  RtpPacketData* _data;
-};
+  Napi::HandleScope scope(env);
+  Napi::Object packet_obj = Napi::Object::New(env);
+  packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(
+    env,
+    data->data.release(),
+    data->length,
+    [](Napi::Env, uint8_t* d) { delete[] d; }
+  ));
+  packet_obj.Set("timestamp", Napi::Number::New(env, data->timestamp));
+  js_callback.Call({packet_obj});
+  delete data;
+}
 
 Napi::FunctionReference RtpPacketSinkWrapper::audio_constructor;
 Napi::FunctionReference RtpPacketSinkWrapper::video_constructor;
@@ -66,15 +63,29 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
 
   _pcRef = Napi::Persistent(info[0].As<Napi::Object>());
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
-  _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
+  auto js_callback = info[2].As<Napi::Function>();
+  _onpacket = Napi::ThreadSafeFunction::New(
+      info.Env(),
+      js_callback,
+      "RtpPacketSinkCallback",
+      0,
+      1
+  );
+
+  // ВИПРАВЛЕНО: Лямбда тепер відповідає оновленому RtpPacketSink
+  _sink = std::make_unique<RtpPacketSink>([this](const webrtc::RtpPacketReceived& packet) {
     auto* packet_data = new RtpPacketData();
-    packet_data->length = length;
-    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[length]);
-    memcpy(packet_data->data.get(), data, length);
-    packet_data->timestamp = timestamp;
-    (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
+    packet_data->length = packet.size();
+    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
+    memcpy(packet_data->data.get(), packet.data(), packet.size());
+    packet_data->timestamp = packet.Timestamp();
+
+    // Безпечно передаємо дані в потік Node.js через ThreadSafeFunction
+    napi_status status = _onpacket.BlockingCall(packet_data, CallJs);
+    if (status != napi_ok) {
+        delete packet_data;
+    }
   });
 
   if (auto* channel = GetMediaChannel()) {
@@ -93,7 +104,10 @@ void RtpPacketSinkWrapper::_Stop() {
     }
     _sink.reset();
   }
-  if (!_onpacket.IsEmpty()) _onpacket.Reset();
+  if (_onpacket) {
+    _onpacket.Release();
+    _onpacket = nullptr;
+  }
   if (!_pcRef.IsEmpty()) _pcRef.Reset();
   if (!_receiverRef.IsEmpty()) _receiverRef.Reset();
 }
@@ -126,7 +140,6 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // ФІНАЛЬНЕ ВИПРАВЛЕННЯ: Отримуємо MID з трансивера
   auto rtp_receiver = receiver_wrapper->receiver();
   if (!rtp_receiver) {
     return nullptr;
@@ -145,7 +158,6 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
       return nullptr;
   }
   auto transport_name = *transceiver->mid();
-
 
   auto receiver_track = rtp_receiver->track();
   if (!receiver_track) {

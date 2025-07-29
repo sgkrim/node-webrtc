@@ -355,10 +355,8 @@ target_include_directories(${MODULE} PRIVATE
 
 target_link_libraries(${MODULE} PRIVATE
   ${CMAKE_THREAD_LIBS_INIT}
-  -Wl,--whole-archive
   libpeerconnection
   libwebrtc
-  -Wl,--no-whole-archive
 )
 
 target_compile_definitions(${MODULE} PRIVATE
