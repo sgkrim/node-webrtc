@@ -9,6 +9,7 @@
 #include "pc/channel_manager.h"
 #include "pc/channel.h"
 #include "media/base/media_channel.h"
+#include "api/dtls_transport_interface.h"
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
@@ -126,11 +127,12 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  auto* transport_wrapper = receiver_wrapper->GetTransport(Env()).As<Napi::Object>().Unwrap<node_webrtc::RTCDtlsTransport>();
-  if(!transport_wrapper) {
+  // ВИПРАВЛЕНО: Використовуємо внутрішній C++ API для отримання транспорту
+  auto rtp_receiver = receiver_wrapper->receiver();
+  if (!rtp_receiver || !rtp_receiver->dtls_transport()) {
       return nullptr;
   }
-  auto transport_name = transport_wrapper->transport()->transport_name();
+  auto transport_name = rtp_receiver->dtls_transport()->transport_name();
 
   auto receiver_track = receiver_wrapper->receiver()->track();
   if (!receiver_track) {
