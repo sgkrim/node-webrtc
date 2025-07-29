@@ -66,7 +66,6 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  // Використовуємо точні типи з вашого rtp_packet_sink.h
   _sink = std::make_unique<RtpPacketSink>([this](const uint8_t* data, size_t length, uint32_t timestamp) {
     auto* packet_data = new RtpPacketData();
     packet_data->length = length;
@@ -133,14 +132,13 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // Використовуємо transport_name, оскільки це те, за чим ми шукаємо канал
   auto transport_name = receiver_wrapper->receiver()->id();
 
-  // Робимо явний `static_cast`, бо VoiceChannel/VideoChannel є нащадками MediaChannel
+  // Нам більше не потрібен cast, бо Get...Channel повертає MediaChannel*
   if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kAudioKind) {
-    return static_cast<cricket::MediaChannel*>(channel_manager->GetVoiceChannel(transport_name));
+    return channel_manager->GetVoiceChannel(transport_name);
   } else if (receiver_track->kind() == webrtc::MediaStreamTrackInterface::kVideoKind) {
-    return static_cast<cricket::MediaChannel*>(channel_manager->GetVideoChannel(transport_name));
+    return channel_manager->GetVideoChannel(transport_name);
   }
 
   return nullptr;

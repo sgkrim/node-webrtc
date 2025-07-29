@@ -27,7 +27,7 @@
    worker_thread_->Invoke<void>(RTC_FROM_HERE, [&] { media_engine_.reset(); });
  }
 
-+VoiceChannel* ChannelManager::GetVoiceChannel(
++MediaChannel* ChannelManager::GetVoiceChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : voice_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -37,7 +37,7 @@
 +  return nullptr;
 +}
 +
-+VideoChannel* ChannelManager::GetVideoChannel(
++MediaChannel* ChannelManager::GetVideoChannel(
 +    const std::string& transport_name) {
 +  for (const auto& channel : video_channels_) {
 +    if (channel->transport_name() == transport_name) {
@@ -52,17 +52,19 @@
    // Flute only have a singleton ChannelManager and we don't want this flag to
 --- a/pc/channel_manager.h
 +++ b/pc/channel_manager.h
-@@ -88,6 +88,10 @@
+@@ -88,8 +88,9 @@
    // Shuts down the media engine.
    void Terminate();
 
-+  // Getters for existing channels.
-+  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
-+  VideoChannel* GetVideoChannel(const std::string& transport_name);
+-  // The operations below all occur on the worker thread.
+-  // ChannelManager retains ownership of the created channels, so clients should
++  // Getters for existing channels, returning the base MediaChannel type.
++  MediaChannel* GetVoiceChannel(const std::string& transport_name);
++  MediaChannel* GetVideoChannel(const std::string& transport_name);
 +
-   // The operations below all occur on the worker thread.
-   // ChannelManager retains ownership of the created channels, so clients should
    // call the appropriate Destroy*Channel method when done.
+   VoiceChannel* CreateVoiceChannel(
+       webrtc::Call* call, const cricket::MediaConfig& media_config,
 --- a/pc/peer_connection.h
 +++ b/pc/peer_connection.h
 @@ -112,6 +112,9 @@
@@ -73,7 +75,7 @@
 +  cricket::ChannelManager* channel_manager() const;
 +
    explicit PeerConnection(PeerConnectionFactory* factory,
-                           std::unique_ptr<RtcEventLog> event_log,
+                           std::unique_ptr<RtpEventLog> event_log,
                            std::unique_ptr<Call> call);
 @@ -926,8 +929,6 @@
    // Returns RTCError::OK() if there are no issues.
