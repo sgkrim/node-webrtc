@@ -37,6 +37,8 @@
 #include "src/test.h"
 #endif
 
+Napi::Value AttachRawSink(const Napi::CallbackInfo&);
+
 static void dispose(void*) {
   node_webrtc::PeerConnectionFactory::Dispose();
 }
@@ -68,6 +70,15 @@ static Napi::Object Init(Napi::Env env, Napi::Object exports) {
 #ifdef DEBUG
   node_webrtc::Test::Init(env, exports);
 #endif
+
+  Napi::Object nonstandard;
+  if (exports.Has("nonstandard")) {
+    nonstandard = exports.Get("nonstandard").As<Napi::Object>();
+  } else {
+    nonstandard = Napi::Object::New(env);
+    exports.Set("nonstandard", nonstandard);
+  }
+  nonstandard.Set("attachRawSink", Napi::Function::New(env, AttachRawSink));
 
   auto status = napi_add_env_cleanup_hook(env, [](void*) {
     dispose(nullptr);
