@@ -62,17 +62,17 @@ Napi::Object RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
+// ЗМІНЕНО: Конструктор тепер приймає лише trackId та callback
 RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   : Napi::ObjectWrap<RtpPacketSinkWrapper>(info) {
 
-  if (info.Length() != 3 || !info[0].IsObject() || !info[1].IsString() || !info[2].IsFunction()) {
-    Napi::TypeError::New(info.Env(), "RTCRawSink constructor expects 3 arguments: (peerConnection, trackId, callback)").ThrowAsJavaScriptException();
+  if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
+    Napi::TypeError::New(info.Env(), "RTCRawSink constructor expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
     return;
   }
 
-  _pcRef = Napi::Persistent(info[0].As<Napi::Object>());
-  _trackId = info[1].As<Napi::String>().Utf8Value();
-  _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
+  _trackId = info[0].As<Napi::String>().Utf8Value();
+  _onpacket = Napi::Persistent(info[1].As<Napi::Function>());
 
   _sink = std::make_unique<RtpPacketSink>([this](const webrtc::RtpPacketReceived& packet) {
     auto* packet_data = new RtpPacketData();
@@ -87,14 +87,21 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
 }
 
 RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
-  _Stop();
+  // Деструктор тепер не може викликати _Stop, бо не має доступу до peerConnection
 }
 
+// ЗМІНЕНО: Start тепер приймає peerConnection
 Napi::Value RtpPacketSinkWrapper::Start(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  if (info.Length() != 1 || !info[0].IsObject()) {
+    Napi::TypeError::New(env, "Start() expects 1 argument: peerConnection").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  Napi::Object pcObject = info[0].As<Napi::Object>();
+
   std::cout << "RtpPacketSinkWrapper: Start() called. Attempting to get MediaChannel." << std::endl;
-  cricket::MediaChannel* channel = GetMediaChannel();
+  cricket::MediaChannel* channel = GetMediaChannel(pcObject);
 
   if (channel) {
       std::cout << "RtpPacketSinkWrapper: MediaChannel found in Start()! Setting sink." << std::endl;
@@ -107,55 +114,37 @@ Napi::Value RtpPacketSinkWrapper::Start(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-void RtpPacketSinkWrapper::_Stop() {
+// ЗМІНЕНО: _Stop тепер приймає peerConnection
+void RtpPacketSinkWrapper::_Stop(Napi::Object peerConnection) {
   if (_sink) {
-    if (!_pcRef.IsEmpty()) {
+    if (!peerConnection.IsEmpty()) {
         try {
-            if (auto* channel = GetMediaChannel()) {
+            if (auto* channel = GetMediaChannel(peerConnection)) {
                 channel->SetRawRtpPacketSink(nullptr);
             }
         } catch (const Napi::Error& e) {
-            // Не виводимо помилку в консоль, щоб уникнути спаму при нормальному завершенні
+            // Ігноруємо помилки при зупинці
         }
     }
     _sink.reset();
   }
   if (!_onpacket.IsEmpty()) _onpacket.Reset();
-  if (!_pcRef.IsEmpty()) _pcRef.Reset();
 }
 
-void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& /* info */) {
-  _Stop();
+// ЗМІНЕНО: Stop тепер приймає peerConnection
+void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& info) {
+  if (info.Length() != 1 || !info[0].IsObject()) {
+    Napi::TypeError::New(info.Env(), "Stop() expects 1 argument: peerConnection").ThrowAsJavaScriptException();
+    return;
+  }
+  _Stop(info[0].As<Napi::Object>());
 }
 
-cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
-  if (_pcRef.IsEmpty()) {
-    return nullptr;
-  }
-
-  Napi::Object pcObject = _pcRef.Value();
-
-  // ЗМІНЕНО: Отримуємо конструктор безпосередньо з об'єкта
-  Napi::Value ctorValue = pcObject.Get("constructor");
-  if (!ctorValue.IsFunction()) {
-      Napi::Error::New(Env(), "FATAL: peerConnection.constructor is not a function!").ThrowAsJavaScriptException();
-      return nullptr;
-  }
-  Napi::Function pcConstructor = ctorValue.As<Napi::Function>();
-
-  // Перевіряємо, чи є об'єкт екземпляром свого ж конструктора
-  bool isInstance = pcObject.InstanceOf(pcConstructor);
-
-  if (!isInstance) {
-      // Ця помилка тепер майже неможлива, але залишаємо її про всяк випадок
-      Napi::Error::New(Env(), "FATAL: The object is not an instance of its own constructor. This is very strange.").ThrowAsJavaScriptException();
-      return nullptr;
-  }
-  std::cout << "[GetMediaChannel] C++ dynamic type check passed. Now unwrapping..." << std::endl;
-
+// ЗМІНЕНО: GetMediaChannel тепер приймає peerConnection
+cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel(Napi::Object pcObject) {
   auto* pc_wrapper = Napi::ObjectWrap<node_webrtc::RTCPeerConnection>::Unwrap(pcObject);
   if (!pc_wrapper) {
-    Napi::Error::New(Env(), "GetMediaChannel Error: Failed to unwrap RTCPeerConnection after successful type check.").ThrowAsJavaScriptException();
+    Napi::Error::New(Env(), "GetMediaChannel Error: Failed to unwrap RTCPeerConnection.").ThrowAsJavaScriptException();
     return nullptr;
   }
 

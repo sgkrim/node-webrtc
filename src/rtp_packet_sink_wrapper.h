@@ -8,12 +8,10 @@
 
 #include "rtp_packet_sink.h"
 
-// Попередні оголошення
 namespace cricket {
 class MediaChannel;
 }
 
-// Структура для передачі даних між потоками
 struct RtpPacketData {
   size_t length;
   uint32_t timestamp;
@@ -27,22 +25,20 @@ class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
   ~RtpPacketSinkWrapper();
 
  private:
-  // Методи, доступні з JS
+  // ЗМІНЕНО: Методи тепер приймають peerConnection як аргумент
   void Stop(const Napi::CallbackInfo&);
   Napi::Value Start(const Napi::CallbackInfo& info);
 
-  // Внутрішні методи
-  void _Stop();
-  cricket::MediaChannel* GetMediaChannel();
+  // ЗМІНЕНО: GetMediaChannel тепер приймає peerConnection як аргумент
+  void _Stop(Napi::Object peerConnection);
+  cricket::MediaChannel* GetMediaChannel(Napi::Object peerConnection);
 
   static Napi::FunctionReference audio_constructor;
   static Napi::FunctionReference video_constructor;
 
-  // ЗМІНЕНО: Зберігаємо ID треку замість посилання на ресивер
-  Napi::ObjectReference _pcRef;
+  // ЗМІНЕНО: _pcRef видалено
   std::string _trackId;
   Napi::FunctionReference _onpacket;
-
   std::unique_ptr<RtpPacketSink> _sink;
 };
 
