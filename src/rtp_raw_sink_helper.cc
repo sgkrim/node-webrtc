@@ -1,5 +1,6 @@
 #include <node-addon-api/napi.h>
 #include <iostream>
+#include <memory>
 
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/rtp_packet_sink.h"
@@ -9,6 +10,13 @@
 #include "pc/channel.h"
 #include "media/base/media_channel.h"
 #include "api/rtp_transceiver_interface.h"
+
+// ДОДАНО: Визначення структури, яке було в .h файлі
+struct RtpPacketData {
+  size_t length;
+  uint32_t timestamp;
+  std::unique_ptr<uint8_t[]> data;
+};
 
 // Цей клас тепер є внутрішньою деталлю реалізації
 class OnPacketWorker : public Napi::AsyncWorker {
@@ -47,11 +55,9 @@ Napi::Value AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[1].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[2].As<Napi::Function>();
 
-    // Створюємо постійне посилання на callback, щоб він не був видалений збирачем сміття
     auto persistent_callback = new Napi::FunctionReference();
     *persistent_callback = Napi::Persistent(callback);
 
-    // Створюємо sink
     auto sink = new RtpPacketSink([env, persistent_callback](const webrtc::RtpPacketReceived& packet) {
         auto* packet_data = new RtpPacketData();
         packet_data->length = packet.size();
@@ -61,7 +67,6 @@ Napi::Value AttachRawSink(const Napi::CallbackInfo& info) {
         (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
     });
 
-    // --- Починаємо логіку отримання каналу ---
     auto* pc_wrapper = Napi::ObjectWrap<node_webrtc::RTCPeerConnection>::Unwrap(pcObject);
     if (!pc_wrapper) {
         delete sink;
@@ -120,10 +125,8 @@ Napi::Value AttachRawSink(const Napi::CallbackInfo& info) {
 
     if (media_channel) {
         std::cout << "attachRawSink: MediaChannel found for " << trackId << "! Attaching sink." << std::endl;
-        // ВАЖЛИВО: libwebrtc перебирає на себе володіння вказівником `sink`
         media_channel->SetRawRtpPacketSink(sink);
     } else {
-        // Якщо канал не знайдено, ми повинні видалити sink самі
         delete sink;
         delete persistent_callback;
         Napi::Error::New(env, "attachRawSink Error: Failed to find MediaChannel.").ThrowAsJavaScriptException();
