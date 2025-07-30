@@ -6,7 +6,6 @@
 
 #include <iostream>
 
-// ВИПРАВЛЕНО: Шляхи підключення без префіксу "webrtc/"
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
 #include "pc/channel.h"
@@ -63,16 +62,17 @@ Napi::Object RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
+// ЗМІНЕНО: Конструктор тепер приймає trackId (рядок) замість об'єкта receiver
 RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   : Napi::ObjectWrap<RtpPacketSinkWrapper>(info) {
 
-  if (info.Length() != 3 || !info[0].IsObject() || !info[1].IsObject() || !info[2].IsFunction()) {
-    Napi::TypeError::New(info.Env(), "RTCRawSink constructor expects 3 arguments: (peerConnection, rtpReceiver, callback)").ThrowAsJavaScriptException();
+  if (info.Length() != 3 || !info[0].IsObject() || !info[1].IsString() || !info[2].IsFunction()) {
+    Napi::TypeError::New(info.Env(), "RTCRawSink constructor expects 3 arguments: (peerConnection, trackId, callback)").ThrowAsJavaScriptException();
     return;
   }
 
   _pcRef = Napi::Persistent(info[0].As<Napi::Object>());
-  _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
+  _trackId = info[1].As<Napi::String>().Utf8Value();
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
   _sink = std::make_unique<RtpPacketSink>([this](const webrtc::RtpPacketReceived& packet) {
@@ -84,7 +84,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
-  std::cout << "RtpPacketSinkWrapper: Constructor finished successfully." << std::endl;
+  std::cout << "RtpPacketSinkWrapper: Constructor for track ID " << _trackId << " finished successfully." << std::endl;
 }
 
 RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
@@ -95,7 +95,6 @@ Napi::Value RtpPacketSinkWrapper::Start(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   std::cout << "RtpPacketSinkWrapper: Start() called. Attempting to get MediaChannel." << std::endl;
-
   cricket::MediaChannel* channel = GetMediaChannel();
 
   if (channel) {
@@ -106,14 +105,12 @@ Napi::Value RtpPacketSinkWrapper::Start(const Napi::CallbackInfo& info) {
         Napi::Error::New(env, "Failed to start sink: MediaChannel is not available and no specific error was thrown.").ThrowAsJavaScriptException();
       }
   }
-
   return env.Undefined();
 }
 
-
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
-    if (!_pcRef.IsEmpty() && !_receiverRef.IsEmpty()) {
+    if (!_pcRef.IsEmpty()) {
         try {
             if (auto* channel = GetMediaChannel()) {
                 channel->SetRawRtpPacketSink(nullptr);
@@ -126,101 +123,68 @@ void RtpPacketSinkWrapper::_Stop() {
   }
   if (!_onpacket.IsEmpty()) _onpacket.Reset();
   if (!_pcRef.IsEmpty()) _pcRef.Reset();
-  if (!_receiverRef.IsEmpty()) _receiverRef.Reset();
 }
 
 void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& /* info */) {
   _Stop();
 }
 
+// ЗМІНЕНО: Логіка повністю перероблена для пошуку ресивера за trackId
 cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
-  // ДОДАНО: Детальне покрокове логування
-  std::cout << "[GetMediaChannel] 0: Entered function" << std::endl;
-  if (_pcRef.IsEmpty() || _receiverRef.IsEmpty()) {
-    std::cout << "[GetMediaChannel] 0.1: Ref is empty" << std::endl;
+  if (_pcRef.IsEmpty()) {
     return nullptr;
   }
 
-  std::cout << "[GetMediaChannel] 1: Unwrapping PeerConnection" << std::endl;
   auto* pc_wrapper = node_webrtc::RTCPeerConnection::Unwrap(_pcRef.Value());
   if (!pc_wrapper) {
     Napi::Error::New(Env(), "GetMediaChannel Error: Failed to unwrap RTCPeerConnection.").ThrowAsJavaScriptException();
     return nullptr;
   }
 
-  std::cout << "[GetMediaChannel] 2: Unwrapping Receiver" << std::endl;
-  auto* receiver_wrapper = node_webrtc::RTCRtpReceiver::Unwrap(_receiverRef.Value());
-  if (!receiver_wrapper) {
-    Napi::Error::New(Env(), "GetMediaChannel Error: Failed to unwrap RTCRtpReceiver.").ThrowAsJavaScriptException();
-    return nullptr;
-  }
-
-  std::cout << "[GetMediaChannel] 3: Getting PeerConnectionInterface" << std::endl;
   webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->pc();
   if (!pc_interface) {
-    std::cout << "[GetMediaChannel] 3.1: PeerConnectionInterface is null" << std::endl;
     Napi::Error::New(Env(), "GetMediaChannel Error: The internal PeerConnectionInterface is null.").ThrowAsJavaScriptException();
     return nullptr;
   }
 
-  std::cout << "[GetMediaChannel] 4: static_cast to PeerConnection" << std::endl;
   auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
-  std::cout << "[GetMediaChannel] 4.1: static_cast successful" << std::endl;
 
+  // Шукаємо потрібний трансивер за ID треку
+  rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
+  for (const auto& transceiver : pc_impl->GetTransceivers()) {
+    if (transceiver && transceiver->receiver() && transceiver->receiver()->track()) {
+      if (transceiver->receiver()->track()->id() == _trackId) {
+        target_transceiver = transceiver;
+        break;
+      }
+    }
+  }
 
-  std::cout << "[GetMediaChannel] 5: Getting RtpReceiverInterface" << std::endl;
-  auto rtp_receiver = receiver_wrapper->receiver();
-  if (!rtp_receiver) {
-    Napi::Error::New(Env(), "GetMediaChannel Error: The internal RtpReceiverInterface is null.").ThrowAsJavaScriptException();
+  if (!target_transceiver) {
+    std::string error_msg = "GetMediaChannel Error: Failed to find a transceiver for track ID: " + _trackId;
+    Napi::Error::New(Env(), error_msg).ThrowAsJavaScriptException();
     return nullptr;
   }
-  std::cout << "[GetMediaChannel] 5.1: RtpReceiverInterface successful" << std::endl;
 
-  std::cout << "[GetMediaChannel] 6: Looping through transceivers" << std::endl;
-  rtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver;
-  for (const auto& t : pc_impl->GetTransceivers()) {
-      if (t->receiver() == rtp_receiver) {
-          transceiver = t;
-          break;
-      }
-  }
-
-  if (!transceiver) {
-      Napi::Error::New(Env(), "GetMediaChannel Error: Failed to find a corresponding RTCRtpTransceiver.").ThrowAsJavaScriptException();
-      return nullptr;
-  }
-  std::cout << "[GetMediaChannel] 7: Found transceiver" << std::endl;
-
-  if (!transceiver->mid()) {
+  if (!target_transceiver->mid()) {
       Napi::Error::New(Env(), "GetMediaChannel Error: The corresponding RTCRtpTransceiver has no MID (critical error).").ThrowAsJavaScriptException();
       return nullptr;
   }
 
-  auto transport_name = *transceiver->mid();
-  std::cout << "[GetMediaChannel] 8: Found MID: " << transport_name << std::endl;
-
+  auto transport_name = *target_transceiver->mid();
   auto* channel_manager = pc_impl->channel_manager();
   if (!channel_manager) {
     Napi::Error::New(Env(), "GetMediaChannel Error: Internal ChannelManager is missing.").ThrowAsJavaScriptException();
     return nullptr;
   }
-  std::cout << "[GetMediaChannel] 9: Found ChannelManager" << std::endl;
 
-  auto receiver_track = rtp_receiver->track();
-  if (!receiver_track) {
-    Napi::Error::New(Env(), "GetMediaChannel Error: The RtpReceiver has no track.").ThrowAsJavaScriptException();
-    return nullptr;
-  }
-  std::cout << "[GetMediaChannel] 10: Found Receiver Track" << std::endl;
-
-  std::string track_kind = receiver_track->kind();
+  std::string track_kind = target_transceiver->receiver()->track()->kind();
   if (track_kind == webrtc::MediaStreamTrackInterface::kAudioKind) {
     auto* voice_channel = channel_manager->GetVoiceChannel(transport_name);
     if (!voice_channel) {
         Napi::Error::New(Env(), "GetMediaChannel Error: Failed to find a VoiceChannel for the given MID.").ThrowAsJavaScriptException();
         return nullptr;
     }
-    std::cout << "[GetMediaChannel] 11: Found VoiceChannel, returning media_channel" << std::endl;
     return voice_channel->media_channel();
   } else if (track_kind == webrtc::MediaStreamTrackInterface::kVideoKind) {
     auto* video_channel = channel_manager->GetVideoChannel(transport_name);
@@ -228,10 +192,8 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
         Napi::Error::New(Env(), "GetMediaChannel Error: Failed to find a VideoChannel for the given MID.").ThrowAsJavaScriptException();
         return nullptr;
     }
-    std::cout << "[GetMediaChannel] 11: Found VideoChannel, returning media_channel" << std::endl;
     return video_channel->media_channel();
   }
 
-  std::cout << "[GetMediaChannel] 12: Unknown track kind, returning null" << std::endl;
   return nullptr;
 }

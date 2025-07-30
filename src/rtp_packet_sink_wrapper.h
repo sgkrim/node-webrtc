@@ -38,8 +38,9 @@ class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
   static Napi::FunctionReference audio_constructor;
   static Napi::FunctionReference video_constructor;
 
+  // ЗМІНЕНО: Зберігаємо ID треку замість посилання на ресивер
   Napi::ObjectReference _pcRef;
-  Napi::ObjectReference _receiverRef;
+  std::string _trackId;
   Napi::FunctionReference _onpacket;
 
   std::unique_ptr<RtpPacketSink> _sink;
