@@ -133,9 +133,9 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
     return nullptr;
   }
 
-  // ДОДАНО: Фінальна перевірка типу перед Unwrap
   Napi::Object pcObject = _pcRef.Value();
-  bool isInstance = pcObject.InstanceOf(node_webrtc::RTCPeerConnection::GetConstructor().Value());
+  // ВИПРАВЛЕНО: Викликаємо правильний метод `constructor()`
+  bool isInstance = pcObject.InstanceOf(node_webrtc::RTCPeerConnection::constructor().Value());
 
   if (!isInstance) {
       Napi::Error::New(Env(), "FATAL: The object is not an instance of RTCPeerConnection at the C++ level!").ThrowAsJavaScriptException();
