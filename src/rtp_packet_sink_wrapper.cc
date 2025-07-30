@@ -62,7 +62,6 @@ Napi::Object RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
-// ЗМІНЕНО: Конструктор тепер приймає trackId (рядок) замість об'єкта receiver
 RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   : Napi::ObjectWrap<RtpPacketSinkWrapper>(info) {
 
@@ -116,7 +115,7 @@ void RtpPacketSinkWrapper::_Stop() {
                 channel->SetRawRtpPacketSink(nullptr);
             }
         } catch (const Napi::Error& e) {
-            std::cerr << "Caught an error in _Stop while trying to get MediaChannel: " << e.what() << std::endl;
+            // Не виводимо помилку в консоль, щоб уникнути спаму при нормальному завершенні
         }
     }
     _sink.reset();
@@ -129,13 +128,22 @@ void RtpPacketSinkWrapper::Stop(const Napi::CallbackInfo& /* info */) {
   _Stop();
 }
 
-// ЗМІНЕНО: Логіка повністю перероблена для пошуку ресивера за trackId
 cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
   if (_pcRef.IsEmpty()) {
     return nullptr;
   }
 
-  auto* pc_wrapper = node_webrtc::RTCPeerConnection::Unwrap(_pcRef.Value());
+  // ДОДАНО: Фінальна перевірка типу перед Unwrap
+  Napi::Object pcObject = _pcRef.Value();
+  bool isInstance = pcObject.InstanceOf(node_webrtc::RTCPeerConnection::GetConstructor().Value());
+
+  if (!isInstance) {
+      Napi::Error::New(Env(), "FATAL: The object is not an instance of RTCPeerConnection at the C++ level!").ThrowAsJavaScriptException();
+      return nullptr;
+  }
+  std::cout << "[GetMediaChannel] C++ type check passed. Now unwrapping..." << std::endl;
+
+  auto* pc_wrapper = Napi::ObjectWrap<node_webrtc::RTCPeerConnection>::Unwrap(pcObject);
   if (!pc_wrapper) {
     Napi::Error::New(Env(), "GetMediaChannel Error: Failed to unwrap RTCPeerConnection.").ThrowAsJavaScriptException();
     return nullptr;
@@ -149,7 +157,6 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
 
   auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
 
-  // Шукаємо потрібний трансивер за ID треку
   rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
   for (const auto& transceiver : pc_impl->GetTransceivers()) {
     if (transceiver && transceiver->receiver() && transceiver->receiver()->track()) {
