@@ -134,18 +134,28 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
   }
 
   Napi::Object pcObject = _pcRef.Value();
-  // ВИПРАВЛЕНО: Викликаємо правильний метод `constructor()`
-  bool isInstance = pcObject.InstanceOf(node_webrtc::RTCPeerConnection::constructor().Value());
 
-  if (!isInstance) {
-      Napi::Error::New(Env(), "FATAL: The object is not an instance of RTCPeerConnection at the C++ level!").ThrowAsJavaScriptException();
+  // ЗМІНЕНО: Отримуємо конструктор безпосередньо з об'єкта
+  Napi::Value ctorValue = pcObject.Get("constructor");
+  if (!ctorValue.IsFunction()) {
+      Napi::Error::New(Env(), "FATAL: peerConnection.constructor is not a function!").ThrowAsJavaScriptException();
       return nullptr;
   }
-  std::cout << "[GetMediaChannel] C++ type check passed. Now unwrapping..." << std::endl;
+  Napi::Function pcConstructor = ctorValue.As<Napi::Function>();
+
+  // Перевіряємо, чи є об'єкт екземпляром свого ж конструктора
+  bool isInstance = pcObject.InstanceOf(pcConstructor);
+
+  if (!isInstance) {
+      // Ця помилка тепер майже неможлива, але залишаємо її про всяк випадок
+      Napi::Error::New(Env(), "FATAL: The object is not an instance of its own constructor. This is very strange.").ThrowAsJavaScriptException();
+      return nullptr;
+  }
+  std::cout << "[GetMediaChannel] C++ dynamic type check passed. Now unwrapping..." << std::endl;
 
   auto* pc_wrapper = Napi::ObjectWrap<node_webrtc::RTCPeerConnection>::Unwrap(pcObject);
   if (!pc_wrapper) {
-    Napi::Error::New(Env(), "GetMediaChannel Error: Failed to unwrap RTCPeerConnection.").ThrowAsJavaScriptException();
+    Napi::Error::New(Env(), "GetMediaChannel Error: Failed to unwrap RTCPeerConnection after successful type check.").ThrowAsJavaScriptException();
     return nullptr;
   }
 
