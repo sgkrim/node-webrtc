@@ -845,6 +845,11 @@ Napi::Value RTCPeerConnection::GetIceGatheringState(const Napi::CallbackInfo& in
   return result;
 }
 
+Napi::Value RTCPeerConnection::GetCustomMethodExists(const Napi::CallbackInfo& info) {
+  return Napi::Boolean::New(info.Env(), true);
+}
+
+
 void RTCPeerConnection::SaveLastSdp(const RTCSessionDescriptionInit& lastSdp) {
   this->_lastSdp = lastSdp;
 }
@@ -871,6 +876,7 @@ void RTCPeerConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("createDataChannel", &RTCPeerConnection::CreateDataChannel),
     InstanceMethod("close", &RTCPeerConnection::Close),
     InstanceMethod("attachRawSink", &RTCPeerConnection::AttachRawSink),
+    InstanceAccessor("customMethodExists", &RTCPeerConnection::GetCustomMethodExists, nullptr),
     InstanceAccessor("canTrickleIceCandidates", &RTCPeerConnection::GetCanTrickleIceCandidates, nullptr),
     InstanceAccessor("connectionState", &RTCPeerConnection::GetConnectionState, nullptr),
     InstanceAccessor("currentLocalDescription", &RTCPeerConnection::GetCurrentLocalDescription, nullptr),
