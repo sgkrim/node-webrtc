@@ -101,6 +101,7 @@ class RTCPeerConnection
   Napi::Value RestartIce(const Napi::CallbackInfo&);
 
   Napi::Value AttachRawSink(const Napi::CallbackInfo&);
+  Napi::Value GetCustomMethodExists(const Napi::CallbackInfo& info);
 
   Napi::Value GetCanTrickleIceCandidates(const Napi::CallbackInfo&);
   Napi::Value GetConnectionState(const Napi::CallbackInfo&);
