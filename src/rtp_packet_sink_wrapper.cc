@@ -3,10 +3,10 @@
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
-#include "rtp_packet_sink.h"
 
 #include <iostream>
 
+// ВИПРАВЛЕНО: Шляхи підключення без префіксу "webrtc/"
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
 #include "pc/channel.h"
@@ -43,7 +43,6 @@ Napi::FunctionReference RtpPacketSinkWrapper::video_constructor;
 Napi::Object RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function audio_func = DefineClass(env, "RTCRawAudioSink", {
     InstanceMethod("stop", &RtpPacketSinkWrapper::Stop),
-    // ДОДАНО: Реєструємо новий метод start()
     InstanceMethod("start", &RtpPacketSinkWrapper::Start)
   });
   audio_constructor = Napi::Persistent(audio_func);
@@ -51,7 +50,6 @@ Napi::Object RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
 
   Napi::Function video_func = DefineClass(env, "RTCRawVideoSink", {
     InstanceMethod("stop", &RtpPacketSinkWrapper::Stop),
-    // ДОДАНО: Реєструємо новий метод start()
     InstanceMethod("start", &RtpPacketSinkWrapper::Start)
   });
   video_constructor = Napi::Persistent(video_func);
@@ -65,7 +63,6 @@ Napi::Object RtpPacketSinkWrapper::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
-// ЗМІНЕНО: Конструктор тепер дуже простий
 RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   : Napi::ObjectWrap<RtpPacketSinkWrapper>(info) {
 
@@ -94,7 +91,6 @@ RtpPacketSinkWrapper::~RtpPacketSinkWrapper() {
   _Stop();
 }
 
-// ДОДАНО: Новий метод Start, який викликається з JS
 Napi::Value RtpPacketSinkWrapper::Start(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -106,9 +102,6 @@ Napi::Value RtpPacketSinkWrapper::Start(const Napi::CallbackInfo& info) {
       std::cout << "RtpPacketSinkWrapper: MediaChannel found in Start()! Setting sink." << std::endl;
       channel->SetRawRtpPacketSink(_sink.get());
   } else {
-      // GetMediaChannel сам викине помилку, якщо щось піде не так.
-      // Якщо він повернув nullptr без помилки, це означає, що ми не повинні були сюди потрапити.
-      // Але про всяк випадок додамо ще одну помилку.
       if (!env.IsExceptionPending()) {
         Napi::Error::New(env, "Failed to start sink: MediaChannel is not available and no specific error was thrown.").ThrowAsJavaScriptException();
       }
@@ -120,10 +113,13 @@ Napi::Value RtpPacketSinkWrapper::Start(const Napi::CallbackInfo& info) {
 
 void RtpPacketSinkWrapper::_Stop() {
   if (_sink) {
-    // Не кидаємо винятків у деструкторі чи Stop, просто намагаємося від'єднати
     if (!_pcRef.IsEmpty() && !_receiverRef.IsEmpty()) {
-        if (auto* channel = GetMediaChannel()) {
-          channel->SetRawRtpPacketSink(nullptr);
+        try {
+            if (auto* channel = GetMediaChannel()) {
+                channel->SetRawRtpPacketSink(nullptr);
+            }
+        } catch (const Napi::Error& e) {
+            std::cerr << "Caught an error in _Stop while trying to get MediaChannel: " << e.what() << std::endl;
         }
     }
     _sink.reset();

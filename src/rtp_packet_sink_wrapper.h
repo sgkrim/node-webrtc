@@ -1,41 +1,48 @@
-#ifndef SRC_RTCRTPPACKETSINKWRAPPER_H_
-#define SRC_RTCRTPPACKETSINKWRAPPER_H_
+#ifndef RTP_PACKET_SINK_WRAPPER_H_
+#define RTP_PACKET_SINK_WRAPPER_H_
+
+#include <memory>
+#include <string>
+
+#include <node-addon-api/napi.h>
 
 #include "rtp_packet_sink.h"
-#include <node-addon-api/napi.h>
-#include <webrtc/api/rtp_receiver_interface.h>
-#include <webrtc/api/peer_connection_interface.h>
 
-// Структура для передачі даних в асинхронний воркер
+// Попередні оголошення
+namespace cricket {
+class MediaChannel;
+}
+
+// Структура для передачі даних між потоками
 struct RtpPacketData {
-  std::unique_ptr<uint8_t[]> data;
   size_t length;
   uint32_t timestamp;
+  std::unique_ptr<uint8_t[]> data;
 };
 
 class RtpPacketSinkWrapper : public Napi::ObjectWrap<RtpPacketSinkWrapper> {
  public:
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   RtpPacketSinkWrapper(const Napi::CallbackInfo& info);
-  ~RtpPacketSinkWrapper() override;
+  ~RtpPacketSinkWrapper();
 
  private:
-  static Napi::FunctionReference audio_constructor;
-  static Napi::FunctionReference video_constructor;
+  // Методи, доступні з JS
+  void Stop(const Napi::CallbackInfo&);
+  Napi::Value Start(const Napi::CallbackInfo& info);
 
+  // Внутрішні методи
   void _Stop();
   cricket::MediaChannel* GetMediaChannel();
 
-  // Оголошення методів, доступних з JavaScript
-  void Stop(const Napi::CallbackInfo& info);
+  static Napi::FunctionReference audio_constructor;
+  static Napi::FunctionReference video_constructor;
 
-  // ДОДАНО: Оголошення нового методу Start
-  Napi::Value Start(const Napi::CallbackInfo& info);
-
-  std::unique_ptr<RtpPacketSink> _sink;
-  Napi::FunctionReference _onpacket;
   Napi::ObjectReference _pcRef;
   Napi::ObjectReference _receiverRef;
+  Napi::FunctionReference _onpacket;
+
+  std::unique_ptr<RtpPacketSink> _sink;
 };
 
-#endif  // SRC_RTCRTPPACKETSINKWRAPPER_H_
+#endif  // RTP_PACKET_SINK_WRAPPER_H_
