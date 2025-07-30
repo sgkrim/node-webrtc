@@ -9,6 +9,11 @@
 
 #include <iosfwd>
 
+#include "src/rtp_packet_sink.h"
+#include "pc/channel_manager.h"
+#include "pc/channel.h"
+#include "media/base/media_channel.h"
+
 #include <api/media_types.h>
 #include <api/peer_connection_interface.h>
 #include <api/rtc_error.h>
@@ -617,6 +622,115 @@ Napi::Value RTCPeerConnection::RestartIce(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+
+class OnPacketWorker : public Napi::AsyncWorker {
+ public:
+  OnPacketWorker(const Napi::Function& callback, RtpPacketData* data)
+    : Napi::AsyncWorker(callback), _data(data) {}
+  ~OnPacketWorker() override = default;
+  void Execute() override {}
+  void OnOK() override {
+    Napi::HandleScope scope(Env());
+    Napi::Object packet_obj = Napi::Object::New(Env());
+    packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(
+      Env(),
+      _data->data.release(),
+      _data->length,
+      [](Napi::Env, uint8_t* d) { delete[] d; }
+    ));
+    packet_obj.Set("timestamp", Napi::Number::New(Env(), _data->timestamp));
+    Callback().Call({packet_obj});
+    delete _data;
+  }
+ private:
+  RtpPacketData* _data;
+};
+
+
+Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+
+    if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
+        Napi::TypeError::New(env, "attachRawSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    std::string trackId = info[0].As<Napi::String>().Utf8Value();
+    Napi::Function callback = info[1].As<Napi::Function>();
+
+    auto persistent_callback = new Napi::FunctionReference();
+    *persistent_callback = Napi::Persistent(callback);
+
+    auto sink = new RtpPacketSink([env, persistent_callback](const webrtc::RtpPacketReceived& packet) {
+        auto* packet_data = new RtpPacketData();
+        packet_data->length = packet.size();
+        packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
+        memcpy(packet_data->data.get(), packet.data(), packet.size());
+        packet_data->timestamp = packet.Timestamp();
+        (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
+    });
+
+    webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
+    if (!pc_interface) {
+        delete sink;
+        delete persistent_callback;
+        Napi::Error::New(env, "attachRawSink Error: The internal PeerConnectionInterface is null.").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
+
+    rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
+    for (const auto& transceiver : pc_impl->GetTransceivers()) {
+        if (transceiver && transceiver->receiver() && transceiver->receiver()->track()) {
+            if (transceiver->receiver()->track()->id() == trackId) {
+                target_transceiver = transceiver;
+                break;
+            }
+        }
+    }
+
+    if (!target_transceiver) {
+        delete sink;
+        delete persistent_callback;
+        std::string error_msg = "attachRawSink Error: Failed to find a transceiver for track ID: " + trackId;
+        Napi::Error::New(env, error_msg).ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    if (!target_transceiver->mid()) {
+        delete sink;
+        delete persistent_callback;
+        Napi::Error::New(env, "attachRawSink Error: The corresponding RTCRtpTransceiver has no MID.").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    auto transport_name = *target_transceiver->mid();
+    auto* channel_manager = pc_impl->channel_manager();
+    cricket::MediaChannel* media_channel = nullptr;
+
+    std::string track_kind = target_transceiver->receiver()->track()->kind();
+    if (track_kind == webrtc::MediaStreamTrackInterface::kAudioKind) {
+        auto* voice_channel = channel_manager->GetVoiceChannel(transport_name);
+        if (voice_channel) media_channel = voice_channel->media_channel();
+    } else if (track_kind == webrtc::MediaStreamTrackInterface::kVideoKind) {
+        auto* video_channel = channel_manager->GetVideoChannel(transport_name);
+        if (video_channel) media_channel = video_channel->media_channel();
+    }
+
+    if (media_channel) {
+        std::cout << "attachRawSink: MediaChannel found for " << trackId << "! Attaching sink." << std::endl;
+        media_channel->SetRawRtpPacketSink(sink);
+    } else {
+        delete sink;
+        delete persistent_callback;
+        Napi::Error::New(env, "attachRawSink Error: Failed to find MediaChannel.").ThrowAsJavaScriptException();
+    }
+
+    return env.Undefined();
+}
+
+
 Napi::Value RTCPeerConnection::GetCanTrickleIceCandidates(const Napi::CallbackInfo& info) {
   return info.Env().Null();
 }
@@ -747,6 +861,7 @@ void RTCPeerConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("addIceCandidate", &RTCPeerConnection::AddIceCandidate),
     InstanceMethod("createDataChannel", &RTCPeerConnection::CreateDataChannel),
     InstanceMethod("close", &RTCPeerConnection::Close),
+    InstanceMethod("attachRawSink", &RTCPeerConnection::AttachRawSink),
     InstanceAccessor("canTrickleIceCandidates", &RTCPeerConnection::GetCanTrickleIceCandidates, nullptr),
     InstanceAccessor("connectionState", &RTCPeerConnection::GetConnectionState, nullptr),
     InstanceAccessor("currentLocalDescription", &RTCPeerConnection::GetCurrentLocalDescription, nullptr),
