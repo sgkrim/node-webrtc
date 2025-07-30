@@ -9,10 +9,14 @@
 
 #include <iosfwd>
 
+// VVV ДОДАНО ВСІ НЕОБХІДНІ ЗАГОЛОВКИ VVV
+#include <iostream>
 #include "src/rtp_packet_sink.h"
+#include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
 #include "pc/channel.h"
 #include "media/base/media_channel.h"
+// ^^^ КІНЕЦЬ ДОДАНИХ ЗАГОЛОВКІВ ^^^
 
 #include <api/media_types.h>
 #include <api/peer_connection_interface.h>
@@ -622,6 +626,11 @@ Napi::Value RTCPeerConnection::RestartIce(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+struct RtpPacketData {
+  size_t length;
+  uint32_t timestamp;
+  std::unique_ptr<uint8_t[]> data;
+};
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
