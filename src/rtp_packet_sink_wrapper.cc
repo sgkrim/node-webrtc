@@ -3,6 +3,7 @@
 #include "src/interfaces/rtc_peer_connection.h"
 #include "src/interfaces/rtc_rtp_receiver.h"
 #include "src/interfaces/media_stream_track.h"
+#include "rtp_packet_sink.h"
 
 #include "pc/peer_connection.h"
 #include "pc/channel_manager.h"
@@ -10,7 +11,7 @@
 #include "media/base/media_channel.h"
 #include "api/rtp_transceiver_interface.h"
 
-// ВИПРАВЛЕНО: Повертаємо реалізацію через AsyncWorker
+
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
   OnPacketWorker(const Napi::Function& callback, RtpPacketData* data)
@@ -69,7 +70,7 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
   _receiverRef = Napi::Persistent(info[1].As<Napi::Object>());
   _onpacket = Napi::Persistent(info[2].As<Napi::Function>());
 
-  // ВИПРАВЛЕНО: Лямбда тепер відповідає оновленому RtpPacketSink
+  // Лямбда тепер відповідає оновленому RtpPacketSink
   _sink = std::make_unique<RtpPacketSink>([this](const webrtc::RtpPacketReceived& packet) {
     auto* packet_data = new RtpPacketData();
     packet_data->length = packet.size();
@@ -81,6 +82,9 @@ RtpPacketSinkWrapper::RtpPacketSinkWrapper(const Napi::CallbackInfo& info)
     (new OnPacketWorker(_onpacket.Value(), packet_data))->Queue();
   });
 
+  // ВИПРАВЛЕНО: GetMediaChannel тепер сам викидає помилку в разі невдачі.
+  // Якщо він повернув `nullptr` без помилки, це означає, що ще рано
+  // (наприклад, SDP не узгоджено), і ми просто чекаємо.
   if (auto* channel = GetMediaChannel()) {
     channel->SetRawRtpPacketSink(_sink.get());
   }
@@ -112,14 +116,21 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
   }
 
   auto* pc_wrapper = node_webrtc::RTCPeerConnection::Unwrap(_pcRef.Value());
-  auto* receiver_wrapper = node_webrtc::RTCRtpReceiver::Unwrap(_receiverRef.Value());
+  if (!pc_wrapper) {
+    Napi::Error::New(Env(), "Internal error: RTCPeerConnection object is invalid.").ThrowAsJavaScriptException();
+    return nullptr;
+  }
 
-  if (!pc_wrapper || !receiver_wrapper) {
+  auto* receiver_wrapper = node_webrtc::RTCRtpReceiver::Unwrap(_receiverRef.Value());
+  if (!receiver_wrapper) {
+    Napi::Error::New(Env(), "Internal error: RTCRtpReceiver object is invalid.").ThrowAsJavaScriptException();
     return nullptr;
   }
 
   webrtc::PeerConnectionInterface* pc_interface = pc_wrapper->pc();
   if (!pc_interface) {
+    // PeerConnection ще не створено, це може бути нормальною ситуацією на ранніх етапах.
+    // Не викидаємо помилку, а просто повертаємо nullptr.
     return nullptr;
   }
 
@@ -127,11 +138,13 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
 
   auto* channel_manager = pc_impl->channel_manager();
   if (!channel_manager) {
+    Napi::Error::New(Env(), "Internal error: ChannelManager is missing.").ThrowAsJavaScriptException();
     return nullptr;
   }
 
   auto rtp_receiver = receiver_wrapper->receiver();
   if (!rtp_receiver) {
+    Napi::Error::New(Env(), "Internal error: RtpReceiver is missing.").ThrowAsJavaScriptException();
     return nullptr;
   }
 
@@ -144,22 +157,38 @@ cricket::MediaChannel* RtpPacketSinkWrapper::GetMediaChannel() {
       }
   }
 
-  if (!transceiver || !transceiver->mid()) {
+  if (!transceiver) {
+      Napi::Error::New(Env(), "Failed to find a corresponding RTCRtpTransceiver for the given RTCRtpReceiver.").ThrowAsJavaScriptException();
+      return nullptr;
+  }
+
+  if (!transceiver->mid()) {
+      // Це найбільш вірогідна причина помилки.
+      Napi::Error::New(Env(), "Failed to get MediaChannel: The corresponding RTCRtpTransceiver has no MID. This can happen if the sink is created before the SDP negotiation is complete.").ThrowAsJavaScriptException();
       return nullptr;
   }
   auto transport_name = *transceiver->mid();
 
   auto receiver_track = rtp_receiver->track();
   if (!receiver_track) {
+    Napi::Error::New(Env(), "Internal error: RtpReceiver has no track.").ThrowAsJavaScriptException();
     return nullptr;
   }
 
   if (std::string(receiver_track->kind()) == webrtc::MediaStreamTrackInterface::kAudioKind) {
     auto* voice_channel = channel_manager->GetVoiceChannel(transport_name);
-    return voice_channel ? voice_channel->media_channel() : nullptr;
+    if (!voice_channel) {
+        Napi::Error::New(Env(), "Failed to find a VoiceChannel for the given track ID (MID).").ThrowAsJavaScriptException();
+        return nullptr;
+    }
+    return voice_channel->media_channel();
   } else if (std::string(receiver_track->kind()) == webrtc::MediaStreamTrackInterface::kVideoKind) {
     auto* video_channel = channel_manager->GetVideoChannel(transport_name);
-    return video_channel ? video_channel->media_channel() : nullptr;
+    if (!video_channel) {
+        Napi::Error::New(Env(), "Failed to find a VideoChannel for the given track ID (MID).").ThrowAsJavaScriptException();
+        return nullptr;
+    }
+    return video_channel->media_channel();
   }
 
   return nullptr;
