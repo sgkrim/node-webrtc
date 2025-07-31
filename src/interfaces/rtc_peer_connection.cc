@@ -682,72 +682,78 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     *persistent_callback = Napi::Persistent(callback);
 
     // ДОДАНО: Інформаційний лог перед передачею завдання в інший потік
-    std::cout << "Starting record. Dispatching sink attachment to WebRTC thread..." << std::endl;
+    std::cout << "Starting record. Dispatching sink attachment to WebRTC thread... v2-2025-07-31 12:16" << std::endl;
 
     // ВИПРАВЛЕНО: Вся логіка тепер виконується у безпечному потоці WebRTC
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, persistent_callback]() {
-        auto env = Env();
-        Napi::HandleScope scope(env);
+        // ДОДАНО: "Канарковий" лог. Якщо ми його не бачимо, проблема в Dispatch.
+                std::cout << "[WebRTC Thread] Executing AttachRawSink for track ID: " << trackId << std::endl;
 
-        auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
-            auto* packet_data = new RtpPacketData();
-            packet_data->length = packet.size();
-            packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
-            memcpy(packet_data->data.get(), packet.data(), packet.size());
-            packet_data->timestamp = packet.Timestamp();
-            (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
-        });
+                // ЗМІНЕНО: Створюємо максимально простий sink для тестування.
+                // Він просто логує повідомлення в консоль при отриманні пакету.
+                auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
+                    std::cout << ">>>>>>>>> RTP PACKET RECEIVED! <<<<<<<<<" << std::endl;
 
-        webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
-        if (!pc_interface) {
-            delete sink;
-            delete persistent_callback;
-            // ДОДАНО: Більш детальний лог помилки
-            std::cerr << "[Thread Error] attachRawSink: The internal PeerConnectionInterface is null. This is critical." << std::endl;
-            return;
-        }
+                    // Поки що не викликаємо складний OnPacketWorker, щоб ізолювати проблему.
+                    // Якщо ви побачите лог вище, це означає, що все працює!
+                    // Ми можемо розкоментувати цей код пізніше.
+                    /*
+                    auto* packet_data = new RtpPacketData();
+                    packet_data->length = packet.size();
+                    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
+                    memcpy(packet_data->data.get(), packet.data(), packet.size());
+                    packet_data->timestamp = packet.Timestamp();
+                    (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
+                    */
+                });
 
-        auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
-        rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
-        for (const auto& transceiver : pc_impl->GetTransceivers()) {
-            if (transceiver && transceiver->receiver() && transceiver->receiver()->track()) {
-                if (transceiver->receiver()->track()->id() == trackId) {
-                    target_transceiver = transceiver;
-                    break;
+                webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
+                if (!pc_interface) {
+                    delete sink;
+                    delete persistent_callback;
+                    std::cerr << "[Thread Error] attachRawSink: The internal PeerConnectionInterface is null." << std::endl;
+                    return;
                 }
-            }
-        }
 
-        if (!target_transceiver || !target_transceiver->mid()) {
-            delete sink;
-            delete persistent_callback;
-            // ДОДАНО: Більш детальний лог помилки
-            std::cerr << "[Thread Error] attachRawSink: Failed to find a valid transceiver with a MID for track ID: " << trackId << ". This might happen if SDP negotiation is not complete." << std::endl;
-            return;
-        }
+                auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
+                rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
+                for (const auto& transceiver : pc_impl->GetTransceivers()) {
+                    if (transceiver && transceiver->receiver() && transceiver->receiver()->track()) {
+                        if (transceiver->receiver()->track()->id() == trackId) {
+                            target_transceiver = transceiver;
+                            break;
+                        }
+                    }
+                }
 
-        auto transport_name = *target_transceiver->mid();
-        auto* channel_manager = pc_impl->channel_manager();
-        cricket::MediaChannel* media_channel = nullptr;
+                if (!target_transceiver || !target_transceiver->mid()) {
+                    delete sink;
+                    delete persistent_callback;
+                    std::cerr << "[Thread Error] attachRawSink: Failed to find a valid transceiver with a MID for track ID: " << trackId << std::endl;
+                    return;
+                }
 
-        std::string track_kind = target_transceiver->receiver()->track()->kind();
-        if (track_kind == webrtc::MediaStreamTrackInterface::kAudioKind) {
-            auto* voice_channel = channel_manager->GetVoiceChannel(transport_name);
-            if (voice_channel) media_channel = voice_channel->media_channel();
-        } else if (track_kind == webrtc::MediaStreamTrackInterface::kVideoKind) {
-            auto* video_channel = channel_manager->GetVideoChannel(transport_name);
-            if (video_channel) media_channel = video_channel->media_channel();
-        }
+                auto transport_name = *target_transceiver->mid();
+                auto* channel_manager = pc_impl->channel_manager();
+                cricket::MediaChannel* media_channel = nullptr;
 
-        if (media_channel) {
-            std::cout << "attachRawSink: MediaChannel found for " << trackId << "! Attaching sink." << std::endl;
-            media_channel->SetRawRtpPacketSink(sink);
-        } else {
-            delete sink;
-            delete persistent_callback;
-            // ДОДАНО: Більш детальний лог помилки
-            std::cerr << "[Thread Error] attachRawSink: Failed to find a specific MediaChannel (Voice or Video) for track ID: " << trackId << std::endl;
-        }
+                std::string track_kind = target_transceiver->receiver()->track()->kind();
+                if (track_kind == webrtc::MediaStreamTrackInterface::kAudioKind) {
+                    auto* voice_channel = channel_manager->GetVoiceChannel(transport_name);
+                    if (voice_channel) media_channel = voice_channel->media_channel();
+                } else if (track_kind == webrtc::MediaStreamTrackInterface::kVideoKind) {
+                    auto* video_channel = channel_manager->GetVideoChannel(transport_name);
+                    if (video_channel) media_channel = video_channel->media_channel();
+                }
+
+                if (media_channel) {
+                    std::cout << "[WebRTC Thread] MediaChannel found for " << trackId << "! Attaching sink." << std::endl;
+                    media_channel->SetRawRtpPacketSink(sink);
+                } else {
+                    delete sink;
+                    delete persistent_callback;
+                    std::cerr << "[Thread Error] attachRawSink: Failed to find MediaChannel for track ID: " << trackId << std::endl;
+                }
     }));
 
     return env.Undefined();
