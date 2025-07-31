@@ -15,6 +15,16 @@ index fb52168586..f2a40abf2d 100644
 
  class AudioSource;
 
+@@ -198,2 +198,5 @@
+  virtual cricket::MediaType media_type() const = 0;
+
++
++    // NOTE: node-webrtc
++  void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink)  {}
++
+  // Sets the abstract interface class for sending RTP/RTCP data and
+  // interface for media transport (experimental). If media transport is
+
 diff --git a/pc/channel_interface.h b/pc/channel_interface.h
 index cd29ed4f84..6108f3211c 100644
 --- a/pc/channel_interface.h
