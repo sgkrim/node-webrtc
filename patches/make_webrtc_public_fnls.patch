@@ -14,27 +14,6 @@ index fb52168586..f2a40abf2d 100644
  namespace cricket {
 
  class AudioSource;
-@@ -192,6 +197,12 @@ class MediaChannel : public sigslot::has_slots<> {
-
-   virtual cricket::MediaType media_type() const = 0;
-
-+    // NOTE: node-webrtc - Safe down-casting without RTTI
-+  MediaChannel* AsMediaChannel() override { return this; }
-+
-+    // NOTE: node-webrtc
-+  void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) override {}
-+
-   // Sets the abstract interface class for sending RTP/RTCP data and
-   // interface for media transport (experimental). If media transport is
-   // provided, it should be used instead of RTP/RTCP.
-@@ -245,6 +256,8 @@ class MediaChannel : public sigslot::has_slots<> {
-       uint32_t ssrc,
-       rtc::scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor);
-
-+
-+
-   // Enable network condition based codec switching.
-   virtual void SetVideoCodecSwitchingEnabled(bool enabled);
 
 diff --git a/pc/channel_interface.h b/pc/channel_interface.h
 index cd29ed4f84..6108f3211c 100644
