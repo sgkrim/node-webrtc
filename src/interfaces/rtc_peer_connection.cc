@@ -722,18 +722,19 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
             return;
         }
 
-        // ВИПРАВЛЕНО: Викликаємо новий, безпечний метод media_channel() з патчу
+        // ФІНАЛЬНЕ РІШЕННЯ: Використовуємо існуючий віртуальний метод
         auto* rtp_transceiver_impl = static_cast<webrtc::RtpTransceiver*>(target_transceiver.get());
-        cricket::MediaChannel* media_channel = rtp_transceiver_impl->media_channel();
+        cricket::ChannelInterface* channel_iface = rtp_transceiver_impl->channel();
+        cricket::MediaChannel* media_channel = channel_iface ? channel_iface->media_channel() : nullptr;
 
         if (media_channel) {
-            std::cout << "[WebRTC Thread] MediaChannel found directly via transceiver! Attaching sink for track " << trackId << std::endl;
+            std::cout << "[WebRTC Thread] MediaChannel found! Attaching sink for track " << trackId << std::endl;
             media_channel->SetRawRtpPacketSink(sink);
             std::cout << "[WebRTC Thread] Sink attached successfully. Recording should start now." << std::endl;
         } else {
             delete sink;
             delete persistent_callback;
-            std::cerr << "[Thread Error] CRITICAL: Failed to get MediaChannel directly from transceiver for track ID: " << trackId << std::endl;
+            std::cerr << "[Thread Error] CRITICAL: Failed to get MediaChannel for track ID: " << trackId << std::endl;
         }
     }));
 
