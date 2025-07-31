@@ -687,7 +687,7 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
 
     // ВИПРАВЛЕНО: Вся логіка тепер виконується у безпечному потоці WebRTC
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, persistent_callback]() {
-            auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
+        auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
             auto* packet_data = new RtpPacketData();
             packet_data->length = packet.size();
             packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
@@ -722,10 +722,9 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
             return;
         }
 
-        // НОВИЙ, НАДІЙНИЙ ПІДХІД: Отримуємо канал безпосередньо з трансивера
-        std::cout << "[WebRTC Thread] Start connecting to Transceiver channel" << std::endl;
+        // ВИПРАВЛЕНО: Викликаємо новий, безпечний метод media_channel() з патчу
         auto* rtp_transceiver_impl = static_cast<webrtc::RtpTransceiver*>(target_transceiver.get());
-        cricket::MediaChannel* media_channel = rtp_transceiver_impl->channel();
+        cricket::MediaChannel* media_channel = rtp_transceiver_impl->media_channel();
 
         if (media_channel) {
             std::cout << "[WebRTC Thread] MediaChannel found directly via transceiver! Attaching sink for track " << trackId << std::endl;
