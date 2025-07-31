@@ -722,9 +722,9 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
             return;
         }
 
-        // ВИПРАВЛЕНО: Викликаємо новий, безпечний метод media_channel() з патчу
+        // ВИПРАВЛЕНО: Використовуємо static_cast для безпечного перетворення типів
         auto* rtp_transceiver_impl = static_cast<webrtc::RtpTransceiver*>(target_transceiver.get());
-        cricket::MediaChannel* media_channel = rtp_transceiver_impl->media_channel();
+        cricket::MediaChannel* media_channel = static_cast<cricket::MediaChannel*>(rtp_transceiver_impl->channel());
 
         if (media_channel) {
             std::cout << "[WebRTC Thread] MediaChannel found directly via transceiver! Attaching sink for track " << trackId << std::endl;
