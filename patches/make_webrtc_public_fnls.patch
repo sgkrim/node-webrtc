@@ -111,3 +111,25 @@ index 9065982f00..b37daf7d1d 100644
  
    enum class SessionError {
      kNone,       // No error.
+diff --git a/pc/rtp_transceiver.h b/pc/rtp_transceiver.h
+index 7ab9e9849a..c409563d49 100644
+--- a/pc/rtp_transceiver.h
++++ b/pc/rtp_transceiver.h
+@@ -20,6 +20,8 @@
+ #include "pc/rtp_receiver.h"
+ #include "pc/rtp_sender.h"
+
++#include "media/base/media_channel.h"
++
+ namespace webrtc {
+
+ // Implementation of the public RtpTransceiverInterface.
+@@ -191,6 +193,8 @@ class RtpTransceiver final
+     return codec_preferences_;
+   }
+
++  cricket::MediaChannel* channel() const { return channel_; }
++
+  private:
+   void OnFirstPacketReceived(cricket::ChannelInterface* channel);
+
