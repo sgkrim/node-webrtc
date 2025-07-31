@@ -683,7 +683,7 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     *persistent_callback = Napi::Persistent(callback);
 
 
-    std::cout << "Starting record. Dispatching sink attachment to WebRTC thread... v4-2025-07-31 15:29" << std::endl;
+    std::cout << "Starting record. Dispatching sink attachment to WebRTC thread... v5-2025-07-31 16:14" << std::endl;
 
     // ВИПРАВЛЕНО: Вся логіка тепер виконується у безпечному потоці WebRTC
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, persistent_callback]() {
