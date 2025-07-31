@@ -128,7 +128,7 @@ index 7ab9e9849a..c409563d49 100644
      return codec_preferences_;
    }
 
-+  cricket::MediaChannel* channel() const { return channel_; }
++  cricket::MediaChannel* media_channel() const { return static_cast<cricket::MediaChannel*>(channel_); }
 +
   private:
    void OnFirstPacketReceived(cricket::ChannelInterface* channel);
