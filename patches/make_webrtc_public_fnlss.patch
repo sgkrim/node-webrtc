@@ -1,0 +1,135 @@
+diff --git a/media/base/media_channel.h b/media/base/media_channel.h
+index fb52168586..2424923468 100644
+--- a/media/base/media_channel.h
++++ b/media/base/media_channel.h
+@@ -62,6 +62,11 @@ class AudioSinkInterface;
+ class VideoFrame;
+ }  // namespace webrtc
+ 
++namespace webrtc {
++  class RtpPacketSinkInterface;
++}
++  
++
+ namespace cricket {
+ 
+ class AudioSource;
+@@ -245,6 +250,11 @@ class MediaChannel : public sigslot::has_slots<> {
+       uint32_t ssrc,
+       rtc::scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor);
+ 
++        // Sets a sink for raw RTP packets.
++  virtual void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) {}
++
++
++
+   // Enable network condition based codec switching.
+   virtual void SetVideoCodecSwitchingEnabled(bool enabled);
+ 
+diff --git a/pc/channel_manager.cc b/pc/channel_manager.cc
+index 16814bd493..09517a4792 100644
+--- a/pc/channel_manager.cc
++++ b/pc/channel_manager.cc
+@@ -21,6 +21,7 @@
+ #include "rtc_base/logging.h"
+ #include "rtc_base/thread_checker.h"
+ #include "rtc_base/trace_event.h"
++#include "pc/channel.h"
+ 
+ namespace cricket {
+ 
+@@ -39,6 +40,7 @@ ChannelManager::ChannelManager(
+   RTC_DCHECK(network_thread_);
+ }
+ 
++
+ ChannelManager::~ChannelManager() {
+   if (initialized_) {
+     Terminate();
+@@ -48,6 +50,28 @@ ChannelManager::~ChannelManager() {
+   worker_thread_->Invoke<void>(RTC_FROM_HERE, [&] { media_engine_.reset(); });
+ }
+ 
++VoiceChannel* ChannelManager::GetVoiceChannel(
++  const std::string& transport_name) {
++for (const auto& channel : voice_channels_) {
++  if (channel->transport_name() == transport_name) {
++    return channel.get();
++  }
++}
++return nullptr;
++}
++
++VideoChannel* ChannelManager::GetVideoChannel(
++  const std::string& transport_name) {
++for (const auto& channel : video_channels_) {
++  if (channel->transport_name() == transport_name) {
++    return channel.get();
++  }
++}
++return nullptr;
++}
++
++
++
+ bool ChannelManager::SetVideoRtxEnabled(bool enable) {
+   // To be safe, this call is only allowed before initialization. Apps like
+   // Flute only have a singleton ChannelManager and we don't want this flag to
+diff --git a/pc/channel_manager.h b/pc/channel_manager.h
+index f66ad4bfc1..c2d96399ed 100644
+--- a/pc/channel_manager.h
++++ b/pc/channel_manager.h
+@@ -88,6 +88,10 @@ class ChannelManager final {
+   // Shuts down the media engine.
+   void Terminate();
+ 
++  // Getters for existing channels, returning the base MediaChannel type.
++  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
++  VideoChannel* GetVideoChannel(const std::string& transport_name);
++  
+   // The operations below all occur on the worker thread.
+   // ChannelManager retains ownership of the created channels, so clients should
+   // call the appropriate Destroy*Channel method when done.
+diff --git a/pc/peer_connection.h b/pc/peer_connection.h
+index 9065982f00..b37daf7d1d 100644
+--- a/pc/peer_connection.h
++++ b/pc/peer_connection.h
+@@ -112,6 +112,8 @@ class PeerConnection : public PeerConnectionInternal,
+     MAX_VALUE = 0x80000,
+   };
+ 
++  cricket::ChannelManager* channel_manager() const;
++
+   explicit PeerConnection(PeerConnectionFactory* factory,
+                           std::unique_ptr<RtcEventLog> event_log,
+                           std::unique_ptr<Call> call);
+@@ -926,7 +928,6 @@ class PeerConnection : public PeerConnectionInternal,
+   // Returns RTCError::OK() if there are no issues.
+   RTCError ValidateConfiguration(const RTCConfiguration& config) const;
+ 
+-  cricket::ChannelManager* channel_manager() const;
+ 
+   enum class SessionError {
+     kNone,       // No error.
+diff --git a/pc/rtp_transceiver.h b/pc/rtp_transceiver.h
+index 7ab9e9849a..c409563d49 100644
+--- a/pc/rtp_transceiver.h
++++ b/pc/rtp_transceiver.h
+@@ -20,6 +20,8 @@
+ #include "pc/rtp_receiver.h"
+ #include "pc/rtp_sender.h"
+ 
++#include "media/base/media_channel.h"
++
+ namespace webrtc {
+ 
+ // Implementation of the public RtpTransceiverInterface.
+@@ -191,6 +193,8 @@ class RtpTransceiver final
+     return codec_preferences_;
+   }
+ 
++  cricket::MediaChannel* channel() const { return channel_; }
++
+  private:
+   void OnFirstPacketReceived(cricket::ChannelInterface* channel);
+ 
