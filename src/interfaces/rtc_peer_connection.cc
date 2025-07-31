@@ -681,79 +681,75 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     auto persistent_callback = new Napi::FunctionReference();
     *persistent_callback = Napi::Persistent(callback);
 
-    // ДОДАНО: Інформаційний лог перед передачею завдання в інший потік
-    std::cout << "Starting record. Dispatching sink attachment to WebRTC thread... v2-2025-07-31 12:16" << std::endl;
+
+    std::cout << "Starting record. Dispatching sink attachment to WebRTC thread... v3-2025-07-31 14:44" << std::endl;
 
     // ВИПРАВЛЕНО: Вся логіка тепер виконується у безпечному потоці WebRTC
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, persistent_callback]() {
-        // ДОДАНО: "Канарковий" лог. Якщо ми його не бачимо, проблема в Dispatch.
-                std::cout << "[WebRTC Thread] Executing AttachRawSink for track ID: " << trackId << std::endl;
+        // ДОДАНО: Детальне покрокове логування всередині потоку WebRTC
+        std::cout << "[WebRTC Thread] 1: Executing AttachRawSink for track ID: " << trackId << std::endl;
 
-                // ЗМІНЕНО: Створюємо максимально простий sink для тестування.
-                // Він просто логує повідомлення в консоль при отриманні пакету.
-                auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
-                    std::cout << ">>>>>>>>> RTP PACKET RECEIVED! <<<<<<<<<" << std::endl;
+        auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
+            std::cout << ">>>>>>>>> RTP PACKET RECEIVED! (Track: " << trackId << ") <<<<<<<<<" << std::endl;
+        });
+        std::cout << "[WebRTC Thread] 2: Dummy sink created." << std::endl;
 
-                    // Поки що не викликаємо складний OnPacketWorker, щоб ізолювати проблему.
-                    // Якщо ви побачите лог вище, це означає, що все працює!
-                    // Ми можемо розкоментувати цей код пізніше.
-                    /*
-                    auto* packet_data = new RtpPacketData();
-                    packet_data->length = packet.size();
-                    packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
-                    memcpy(packet_data->data.get(), packet.data(), packet.size());
-                    packet_data->timestamp = packet.Timestamp();
-                    (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
-                    */
-                });
+        webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
+        if (!pc_interface) {
+            delete sink;
+            delete persistent_callback;
+            std::cerr << "[Thread Error] 3.1: PeerConnectionInterface is null." << std::endl;
+            return;
+        }
+        std::cout << "[WebRTC Thread] 3: Got PeerConnectionInterface pointer." << std::endl;
 
-                webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
-                if (!pc_interface) {
-                    delete sink;
-                    delete persistent_callback;
-                    std::cerr << "[Thread Error] attachRawSink: The internal PeerConnectionInterface is null." << std::endl;
-                    return;
+        auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
+        std::cout << "[WebRTC Thread] 4: static_cast to PeerConnection successful." << std::endl;
+
+        rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
+        std::cout << "[WebRTC Thread] 5: About to loop through transceivers." << std::endl;
+        for (const auto& transceiver : pc_impl->GetTransceivers()) {
+            if (transceiver && transceiver->receiver() && transceiver->receiver()->track()) {
+                if (transceiver->receiver()->track()->id() == trackId) {
+                    target_transceiver = transceiver;
+                    break;
                 }
+            }
+        }
+        std::cout << "[WebRTC Thread] 6: Looped through transceivers." << std::endl;
 
-                auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
-                rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
-                for (const auto& transceiver : pc_impl->GetTransceivers()) {
-                    if (transceiver && transceiver->receiver() && transceiver->receiver()->track()) {
-                        if (transceiver->receiver()->track()->id() == trackId) {
-                            target_transceiver = transceiver;
-                            break;
-                        }
-                    }
-                }
+        if (!target_transceiver || !target_transceiver->mid()) {
+            delete sink;
+            delete persistent_callback;
+            std::cerr << "[Thread Error] 7.1: Failed to find a valid transceiver with a MID." << std::endl;
+            return;
+        }
+        std::cout << "[WebRTC Thread] 7: Found valid transceiver with MID." << std::endl;
 
-                if (!target_transceiver || !target_transceiver->mid()) {
-                    delete sink;
-                    delete persistent_callback;
-                    std::cerr << "[Thread Error] attachRawSink: Failed to find a valid transceiver with a MID for track ID: " << trackId << std::endl;
-                    return;
-                }
+        auto transport_name = *target_transceiver->mid();
+        auto* channel_manager = pc_impl->channel_manager();
+        std::cout << "[WebRTC Thread] 8: Got channel manager." << std::endl;
 
-                auto transport_name = *target_transceiver->mid();
-                auto* channel_manager = pc_impl->channel_manager();
-                cricket::MediaChannel* media_channel = nullptr;
+        cricket::MediaChannel* media_channel = nullptr;
+        std::string track_kind = target_transceiver->receiver()->track()->kind();
+        if (track_kind == webrtc::MediaStreamTrackInterface::kAudioKind) {
+            auto* voice_channel = channel_manager->GetVoiceChannel(transport_name);
+            if (voice_channel) media_channel = voice_channel->media_channel();
+        } else if (track_kind == webrtc::MediaStreamTrackInterface::kVideoKind) {
+            auto* video_channel = channel_manager->GetVideoChannel(transport_name);
+            if (video_channel) media_channel = video_channel->media_channel();
+        }
+        std::cout << "[WebRTC Thread] 9: Searched for specific media channel." << std::endl;
 
-                std::string track_kind = target_transceiver->receiver()->track()->kind();
-                if (track_kind == webrtc::MediaStreamTrackInterface::kAudioKind) {
-                    auto* voice_channel = channel_manager->GetVoiceChannel(transport_name);
-                    if (voice_channel) media_channel = voice_channel->media_channel();
-                } else if (track_kind == webrtc::MediaStreamTrackInterface::kVideoKind) {
-                    auto* video_channel = channel_manager->GetVideoChannel(transport_name);
-                    if (video_channel) media_channel = video_channel->media_channel();
-                }
-
-                if (media_channel) {
-                    std::cout << "[WebRTC Thread] MediaChannel found for " << trackId << "! Attaching sink." << std::endl;
-                    media_channel->SetRawRtpPacketSink(sink);
-                } else {
-                    delete sink;
-                    delete persistent_callback;
-                    std::cerr << "[Thread Error] attachRawSink: Failed to find MediaChannel for track ID: " << trackId << std::endl;
-                }
+        if (media_channel) {
+            std::cout << "[WebRTC Thread] 10: MediaChannel found! Attaching sink." << std::endl;
+            media_channel->SetRawRtpPacketSink(sink);
+            std::cout << "[WebRTC Thread] 11: Sink attached successfully." << std::endl;
+        } else {
+            delete sink;
+            delete persistent_callback;
+            std::cerr << "[Thread Error] 10.1: Failed to find MediaChannel." << std::endl;
+        }
     }));
 
     return env.Undefined();
