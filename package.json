@@ -22,7 +22,7 @@
     "module_name": "wrtc",
     "module_path": "./build/{configuration}/",
     "remote_path": "./binary/{module_name}/v{version}/{configuration}/",
-    "package_name": "{platform}-{arch}.tar.gz?v12",
+    "package_name": "{platform}-{arch}.tar.gz?v13",
     "host": "https://minex.pp.ua"
   },
   "engines": {
