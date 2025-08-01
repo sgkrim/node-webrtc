@@ -130,14 +130,22 @@ index cf4189b896..abd78eee79 100644
  // Upon completion of creating the session description, SetLocalDescription() is
  // invoked with the result.
 diff --git a/pc/peer_connection.h b/pc/peer_connection.h
-index 9065982f00..9afffd913c 100644
+index 9065982f00..21490039a3 100644
 --- a/pc/peer_connection.h
 +++ b/pc/peer_connection.h
-@@ -112,6 +112,8 @@ class PeerConnection : public PeerConnectionInternal,
+@@ -38,6 +38,7 @@
+ #include "rtc_base/race_checker.h"
+ #include "rtc_base/unique_id_generator.h"
+ #include "rtc_base/weak_ptr.h"
++#include "rtc_base/system/rtc_export.h"
+ 
+ namespace webrtc {
+ 
+@@ -112,6 +113,8 @@ class PeerConnection : public PeerConnectionInternal,
      MAX_VALUE = 0x80000,
    };
  
-+  cricket::ChannelInterface* GetChannelByTrackId(const std::string& track_id);
++  RTC_EXPORT cricket::ChannelInterface* GetChannelByTrackId(const std::string& track_id);
 +
    explicit PeerConnection(PeerConnectionFactory* factory,
                            std::unique_ptr<RtcEventLog> event_log,
