@@ -9,7 +9,6 @@
 #include <assert.h>
 #include <uv.h>
 
-#include "src/rtp_packet_sink_wrapper.h"
 #include "src/interfaces/legacy_rtc_stats_report.h"
 #include "src/interfaces/media_stream.h"
 #include "src/interfaces/media_stream_track.h"
@@ -44,7 +43,6 @@ static void dispose(void*) {
 }
 
 static Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  RtpPacketSinkWrapper::Init(env, exports);
   node_webrtc::AsyncContextReleaser::Init(env, exports);
   node_webrtc::ErrorFactory::Init(env, exports);
   node_webrtc::GetDisplayMedia::Init(env, exports);
