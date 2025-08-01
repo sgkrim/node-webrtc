@@ -678,7 +678,6 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     auto persistent_callback = new Napi::FunctionReference();
     *persistent_callback = Napi::Persistent(callback);
 
-    // Створюємо sink з нашим новим конструктором
     auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
         auto* packet_data = new RtpPacketData();
         packet_data->length = packet.size();
@@ -688,13 +687,18 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
         (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
     }, persistent_callback);
 
-    // ВИПРАВЛЕНО: Захоплюємо `sink` у лямбді
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink]() {
+        // ВИКОРИСТОВУЄМО RTC_LOG ДЛЯ БЕЗПЕЧНОГО ЛОГУВАННЯ З ПОТОКІВ
+        RTC_LOG(LS_INFO) << "[SINK_LOG] Executing Dispatch for track " << trackId;
+
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
         if (!pc_interface) {
-            delete sink;
+            RTC_LOG(LS_ERROR) << "[SINK_LOG] PeerConnectionInterface is null.";
+            // Тут ми навмисно не робимо delete, щоб уникнути крешу, якщо проблема в цьому
             return;
         }
+
+        RTC_LOG(LS_INFO) << "[SINK_LOG] Step 1: Got PeerConnectionInterface.";
 
         rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
         for (const auto& transceiver : pc_interface->GetTransceivers()) {
@@ -705,18 +709,26 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
         }
 
         if (!target_transceiver) {
-            delete sink;
+            RTC_LOG(LS_WARNING) << "[SINK_LOG] Step 2: FAILED to find transceiver.";
+            // delete sink;
             return;
         }
 
+        RTC_LOG(LS_INFO) << "[SINK_LOG] Step 2: Found transceiver.";
+
         auto* rtp_transceiver_impl = static_cast<webrtc::RtpTransceiver*>(target_transceiver.get());
+        RTC_LOG(LS_INFO) << "[SINK_LOG] Step 3: Casted to RtpTransceiver.";
+
         cricket::ChannelInterface* channel_iface = rtp_transceiver_impl->channel();
+        RTC_LOG(LS_INFO) << "[SINK_LOG] Step 4: Called channel(). Pointer is: " << channel_iface;
 
         if (channel_iface) {
-            // Викликаємо наш новий, безпечний метод з ChannelInterface
+            RTC_LOG(LS_INFO) << "[SINK_LOG] Step 5: channel_iface is not null. Attaching sink.";
             channel_iface->SetRawRtpPacketSink(sink);
+            RTC_LOG(LS_INFO) << "[SINK_LOG] Step 6: Sink attached successfully.";
         } else {
-            delete sink;
+            RTC_LOG(LS_WARNING) << "[SINK_LOG] Step 5: channel_iface is null.";
+            // delete sink;
         }
     }));
 
