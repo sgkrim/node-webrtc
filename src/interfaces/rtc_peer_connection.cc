@@ -675,12 +675,10 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    // Створюємо постійне посилання на callback для асинхронної роботи
     auto persistent_callback = new Napi::FunctionReference();
     *persistent_callback = Napi::Persistent(callback);
 
-    // Створюємо наш приймач (sink)
-    // Передаємо йому і лямбду для обробки, і вказівник на persistent_callback для управління пам'яттю
+    // Створюємо sink з нашим новим конструктором
     auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
         auto* packet_data = new RtpPacketData();
         packet_data->length = packet.size();
@@ -690,16 +688,14 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
         (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
     }, persistent_callback);
 
-    // Вся логіка пошуку та прив'язки виконується в потоці WebRTC, щоб уникнути гонки потоків
+    // ВИПРАВЛЕНО: Захоплюємо `sink` у лямбді
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink]() {
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
         if (!pc_interface) {
-            RTC_LOG(LS_ERROR) << "PeerConnectionInterface is null. Cannot attach sink.";
-            delete sink; // Важливо очистити пам'ять, якщо щось пішло не так
+            delete sink;
             return;
         }
 
-        // 1. Знаходимо потрібний транссівер за trackId
         rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
         for (const auto& transceiver : pc_interface->GetTransceivers()) {
             if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
@@ -709,23 +705,17 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
         }
 
         if (!target_transceiver) {
-            RTC_LOG(LS_WARNING) << "Failed to find a valid transceiver for track ID: " << trackId;
             delete sink;
             return;
         }
 
-        // 2. Отримуємо channel та media_channel (це вже безпечно, оскільки ми в правильному потоці)
         auto* rtp_transceiver_impl = static_cast<webrtc::RtpTransceiver*>(target_transceiver.get());
         cricket::ChannelInterface* channel_iface = rtp_transceiver_impl->channel();
-        cricket::MediaChannel* media_channel = channel_iface ? channel_iface->media_channel() : nullptr;
 
-        if (media_channel) {
-            // 3. ВИКЛИКАЄМО НАШ НОВИЙ, БЕЗПЕЧНИЙ МЕТОД!
-            // Цей виклик більше не призведе до крешу.
-            RTC_LOG(LS_INFO) << "Attaching raw RTP sink to MediaChannel for track: " << trackId;
-            media_channel->SetRawRtpPacketSink(sink);
+        if (channel_iface) {
+            // Викликаємо наш новий, безпечний метод з ChannelInterface
+            channel_iface->SetRawRtpPacketSink(sink);
         } else {
-            RTC_LOG(LS_WARNING) << "Failed to get MediaChannel for track ID: " << trackId;
             delete sink;
         }
     }));

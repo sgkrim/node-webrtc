@@ -1,24 +1,34 @@
-#ifndef RTP_PACKET_SINK_H_
-#define RTP_PACKET_SINK_H_
+#ifndef SRC_RTPSINK_H_
+#define SRC_RTPSINK_H_
 
 #include <functional>
-
-#include "call/rtp_packet_sink_interface.h"
-#include "modules/rtp_rtcp/source/rtp_packet_received.h"
+#include "src/node_webrtc.h" // для Napi::FunctionReference
 
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
-public:
-  // Callback тепер приймає RtpPacketReceived, щоб уникнути зайвого копіювання
+ public:
   using OnRtpPacketCallback = std::function<void(const webrtc::RtpPacketReceived&)>;
 
-  explicit RtpPacketSink(OnRtpPacketCallback on_packet);
-  ~RtpPacketSink() override;
+  // НАШ НОВИЙ КОНСТРУКТОР
+  explicit RtpPacketSink(OnRtpPacketCallback on_packet, Napi::FunctionReference* persistent_callback)
+      : _on_packet(on_packet), _persistent_callback(persistent_callback) {}
 
-  void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override;
+  // ДЕСТРУКТОР ДЛЯ ОЧИЩЕННЯ ПАМ'ЯТІ
+  ~RtpPacketSink() override {
+    if (_persistent_callback) {
+      _persistent_callback->Reset();
+      delete _persistent_callback;
+    }
+  }
 
-private:
-  // Більше ніяких м'ютексів
+  void OnPacket(const webrtc::RtpPacketReceived& packet) override {
+    if (_on_packet) {
+      _on_packet(packet);
+    }
+  }
+
+ private:
   OnRtpPacketCallback _on_packet;
+  Napi::FunctionReference* _persistent_callback; // Поле для зберігання
 };
 
-#endif  // RTP_PACKET_SINK_H_
+#endif  // SRC_RTPSINK_H_
