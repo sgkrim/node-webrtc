@@ -683,7 +683,7 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     *persistent_callback = Napi::Persistent(callback);
 
 
-    std::cout << "Starting record. Dispatching sink attachment to WebRTC thread... v6-2025-07-31 23:55" << std::endl;
+    std::cout << "Starting record. Dispatching sink attachment to WebRTC thread... v7-2025-08-01 15:45" << std::endl;
 
     // ВИПРАВЛЕНО: Вся логіка тепер виконується у безпечному потоці WebRTC
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, persistent_callback]() {
@@ -731,22 +731,40 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
             }
             std::cout << "[Thread Log] Successfully got ChannelInterface for track ID: " << trackId << std::endl;
 
-            // Крок 2: Безпечне отримання media_channel()
-            cricket::MediaChannel* media_channel = channel_iface->media_channel();
+             if (!channel_iface) {
+                 std::cerr << "[Thread Error] CRITICAL: rtp_transceiver_impl->channel() returned nullptr for track ID: " << trackId << std::endl;
+                 // ... код очищення
+                 return;
+             }
+             std::cout << "[Thread Log] Successfully got ChannelInterface for track ID: " << trackId << std::endl;
 
-            if (media_channel) {
-                std::cout << "[WebRTC Thread] MediaChannel found! Attaching sink for track " << trackId << std::endl;
-                media_channel->SetRawRtpPacketSink(sink);
-                // ВАЖЛИВО: libwebrtc тепер володіє вказівником `sink`. Нам більше не потрібно його видаляти.
-                // Ми також не повинні видаляти persistent_callback, оскільки він буде використовуватись у sink.
-                // Потрібно реалізувати логіку його видалення, коли sink більше не потрібен (наприклад, у деструкторі RtpPacketSink).
-                std::cout << "[WebRTC Thread] Sink attached successfully. Recording should start now." << std::endl;
-            } else {
-                std::cerr << "[Thread Error] CRITICAL: Failed to get MediaChannel from ChannelInterface for track ID: " << trackId << std::endl;
-                delete sink; // Sink не був переданий, тому ми маємо його видалити
-                persistent_callback->Reset();
-                delete persistent_callback;
-            }
+             // ================== НОВИЙ ВИПРАВЛЕНИЙ КОД ==================
+
+             // Крок 1: Спробуємо безпечно перетворити інтерфейс до базового медіа-каналу
+             cricket::BaseChannel* base_channel = channel_iface->AsBaseChannel();
+
+             if (base_channel) {
+                 // Крок 2: Тепер безпечно отримуємо MediaChannel з BaseChannel
+                 cricket::MediaChannel* media_channel = base_channel->media_channel();
+
+                 if (media_channel) {
+                     std::cout << "[WebRTC Thread] MediaChannel found! Attaching sink for track " << trackId << std::endl;
+                     media_channel->SetRawRtpPacketSink(sink);
+                     std::cout << "[WebRTC Thread] Sink attached successfully. Recording should start now." << std::endl;
+                 } else {
+                     // Цей випадок малоймовірний, якщо base_channel існує, але перевірка не завадить
+                     std::cerr << "[Thread Error] CRITICAL: Failed to get MediaChannel from BaseChannel for track ID: " << trackId << std::endl;
+                     delete sink;
+                     persistent_callback->Reset();
+                     delete persistent_callback;
+                 }
+             } else {
+                 // Це означає, що канал не є медіа-каналом (ймовірно, це SCTP для DataChannel)
+                 std::cerr << "[Thread Warning] Channel for track ID " << trackId << " is not a BaseChannel (likely a DataChannel). Skipping sink attachment." << std::endl;
+                 delete sink;
+                 persistent_callback->Reset();
+                 delete persistent_callback;
+             }
     }));
 
     return env.Undefined();
