@@ -1,12 +1,20 @@
 diff --git a/pc/channel.cc b/pc/channel.cc
-index 03e63b0224..eb76c5a11a 100644
+index 03e63b0224..bf24c26d2d 100644
 --- a/pc/channel.cc
 +++ b/pc/channel.cc
-@@ -45,6 +45,18 @@ struct SendPacketMessageData : public rtc::MessageData {
+@@ -45,6 +45,8 @@ struct SendPacketMessageData : public rtc::MessageData {
    rtc::PacketOptions options;
  };
  
 +
++
+ // Finds a stream based on target's Primary SSRC or RIDs.
+ // This struct is used in BaseChannel::UpdateLocalStreams_w.
+ struct StreamFinder {
+@@ -80,6 +82,16 @@ struct StreamFinder {
+ 
+ }  // namespace
+ 
 +// НАШ КОД: Реалізація методу.
 +void BaseChannel::SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) {
 +  // Використовуємо Invoke, щоб безпечно встановити вказівник
@@ -17,10 +25,9 @@ index 03e63b0224..eb76c5a11a 100644
 +  });
 +}
 +
-+
- // Finds a stream based on target's Primary SSRC or RIDs.
- // This struct is used in BaseChannel::UpdateLocalStreams_w.
- struct StreamFinder {
+ enum {
+   MSG_SEND_RTP_PACKET = 1,
+   MSG_SEND_RTCP_PACKET,
 @@ -475,10 +487,22 @@ void BaseChannel::OnRtpPacket(const webrtc::RtpPacketReceived& parsed_packet) {
    auto packet_buffer = parsed_packet.Buffer();
  
@@ -35,7 +42,7 @@ index 03e63b0224..eb76c5a11a 100644
 +
 +      // НАШ КОД: Просто використовуємо готову копію пакета.
 +      if (raw_rtp_packet_sink_) {
-+        raw_rtp_packet_sink_->OnPacket(parsed_packet);
++        raw_rtp_packet_sink_->OnRtpPacket(parsed_packet);
 +      }
 +
 +      // Існуюча логіка: витягуємо дані з нашої копії пакета.
@@ -88,3 +95,50 @@ index cd29ed4f84..4a55fb32e2 100644
    // TODO(deadbeef): This is redundant; remove this.
    virtual const std::string& transport_name() const = 0;
  
+diff --git a/pc/peer_connection.cc b/pc/peer_connection.cc
+index cf4189b896..abd78eee79 100644
+--- a/pc/peer_connection.cc
++++ b/pc/peer_connection.cc
+@@ -692,6 +692,29 @@ class CreateSessionDescriptionObserverOperationWrapper
+ 
+ }  // namespace
+ 
++
++// НАША НОВА РЕАЛІЗАЦІЯ
++cricket::ChannelInterface* PeerConnection::GetChannelByTrackId(const std::string& track_id) {
++  // Цей метод виконується всередині PeerConnection і має безпечний доступ до своїх даних
++  rtc::scoped_refptr<RtpTransceiverProxyWithInternal<RtpTransceiver>> found_transceiver;
++  for (const auto& transceiver : GetTransceivers()) {
++    if (transceiver->receiver() && transceiver->receiver()->track() &&
++        transceiver->receiver()->track()->id() == track_id) {
++      found_transceiver =
++          static_cast<RtpTransceiverProxyWithInternal<RtpTransceiver>*>(
++              transceiver.get());
++      break;
++    }
++  }
++
++  if (found_transceiver && found_transceiver->internal()->channel()) {
++    return found_transceiver->internal()->channel();
++  }
++
++  return nullptr;
++}
++
++
+ // Used by parameterless SetLocalDescription() to create an offer or answer.
+ // Upon completion of creating the session description, SetLocalDescription() is
+ // invoked with the result.
+diff --git a/pc/peer_connection.h b/pc/peer_connection.h
+index 9065982f00..9afffd913c 100644
+--- a/pc/peer_connection.h
++++ b/pc/peer_connection.h
+@@ -112,6 +112,8 @@ class PeerConnection : public PeerConnectionInternal,
+     MAX_VALUE = 0x80000,
+   };
+ 
++  cricket::ChannelInterface* GetChannelByTrackId(const std::string& track_id);
++
+   explicit PeerConnection(PeerConnectionFactory* factory,
+                           std::unique_ptr<RtcEventLog> event_log,
+                           std::unique_ptr<Call> call);
