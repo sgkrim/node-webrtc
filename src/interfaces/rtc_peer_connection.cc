@@ -675,8 +675,12 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
+    RTC_LOG(LS_INFO) << "[AttachRawSink_LOG] Starting record method with trackId: " << trackId;
+
     auto persistent_callback = new Napi::FunctionReference();
     *persistent_callback = Napi::Persistent(callback);
+
+    RTC_LOG(LS_INFO) << "[AttachRawSink_LOG] Setup callback";
 
     auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
         auto* packet_data = new RtpPacketData();
@@ -686,6 +690,8 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
         packet_data->timestamp = packet.Timestamp();
         (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
     }, persistent_callback);
+
+    RTC_LOG(LS_INFO) << "[AttachRawSink_LOG] Initialize sink";
 
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink]() {
         // ВИКОРИСТОВУЄМО RTC_LOG ДЛЯ БЕЗПЕЧНОГО ЛОГУВАННЯ З ПОТОКІВ
