@@ -1,18 +1,3 @@
-diff --git a/media/base/media_channel.h b/media/base/media_channel.h
-index fb52168586..264bd575f4 100644
---- a/media/base/media_channel.h
-+++ b/media/base/media_channel.h
-@@ -186,6 +186,10 @@ class MediaChannel : public sigslot::has_slots<> {
-     virtual ~NetworkInterface() {}
-   };
- 
-+  // НАША МОДИФІКАЦІЯ:
-+  // Дозволяє встановити зовнішній приймач для сирих RTP-пакетів.
-+  virtual void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) = 0;
-+
-   explicit MediaChannel(const MediaConfig& config);
-   MediaChannel();
-   ~MediaChannel() override;
 diff --git a/pc/channel.cc b/pc/channel.cc
 index 03e63b0224..eb76c5a11a 100644
 --- a/pc/channel.cc
@@ -89,3 +74,17 @@ index 238a8e20fe..5cb46e031a 100644
    // These methods verify that:
    // * The required content description directions have been set.
    // * The channel is enabled.
+diff --git a/pc/channel_interface.h b/pc/channel_interface.h
+index cd29ed4f84..4a55fb32e2 100644
+--- a/pc/channel_interface.h
++++ b/pc/channel_interface.h
+@@ -32,6 +32,9 @@ class ChannelInterface {
+ 
+   virtual MediaChannel* media_channel() const = 0;
+ 
++  // НАШ КОД: Додаємо сюди, а не в MediaChannel
++  virtual void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) {}
++
+   // TODO(deadbeef): This is redundant; remove this.
+   virtual const std::string& transport_name() const = 0;
+ 
