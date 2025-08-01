@@ -23,7 +23,7 @@ class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
     }
   }
 
-  void OnPacket(const webrtc::RtpPacketReceived& packet) override {
+  void OnPacket(const webrtc::RtpPacketReceived& packet) const override {
     if (_on_packet) {
       _on_packet(packet);
     }
