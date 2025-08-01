@@ -2,7 +2,8 @@
 #define SRC_RTPSINK_H_
 
 #include <functional>
-#include "src/node_webrtc.h" // для Napi::FunctionReference
+#include "src/converters/napi.h"
+#include "src/dictionaries/macros/napi.h"
 
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
  public:
