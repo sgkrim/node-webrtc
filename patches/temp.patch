@@ -1,5 +1,5 @@
 diff --git a/media/base/media_channel.h b/media/base/media_channel.h
-index fb52168586..f2a40abf2d 100644
+index fb52168586..f574345694 100644
 --- a/media/base/media_channel.h
 +++ b/media/base/media_channel.h
 @@ -62,6 +62,11 @@ class AudioSinkInterface;
@@ -9,25 +9,23 @@ index fb52168586..f2a40abf2d 100644
 +namespace webrtc {
 +  class RtpPacketSinkInterface;
 +}
-+  
++
 +
  namespace cricket {
  
  class AudioSource;
-@@ -192,6 +197,12 @@ class MediaChannel : public sigslot::has_slots<> {
+@@ -192,6 +197,10 @@ class MediaChannel : public sigslot::has_slots<> {
  
    virtual cricket::MediaType media_type() const = 0;
  
-+    // NOTE: node-webrtc - Safe down-casting without RTTI
-+  MediaChannel* AsMediaChannel() override { return this; }
 +
 +    // NOTE: node-webrtc
-+  void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) override {}
++  void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink)  {}
 +
    // Sets the abstract interface class for sending RTP/RTCP data and
    // interface for media transport (experimental). If media transport is
    // provided, it should be used instead of RTP/RTCP.
-@@ -245,6 +256,8 @@ class MediaChannel : public sigslot::has_slots<> {
+@@ -245,6 +254,8 @@ class MediaChannel : public sigslot::has_slots<> {
        uint32_t ssrc,
        rtc::scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor);
  
@@ -109,7 +107,7 @@ index 16814bd493..09517a4792 100644
    // To be safe, this call is only allowed before initialization. Apps like
    // Flute only have a singleton ChannelManager and we don't want this flag to
 diff --git a/pc/channel_manager.h b/pc/channel_manager.h
-index f66ad4bfc1..c2d96399ed 100644
+index f66ad4bfc1..06981a284d 100644
 --- a/pc/channel_manager.h
 +++ b/pc/channel_manager.h
 @@ -88,6 +88,10 @@ class ChannelManager final {
@@ -119,7 +117,7 @@ index f66ad4bfc1..c2d96399ed 100644
 +  // Getters for existing channels, returning the base MediaChannel type.
 +  VoiceChannel* GetVoiceChannel(const std::string& transport_name);
 +  VideoChannel* GetVideoChannel(const std::string& transport_name);
-+  
++
    // The operations below all occur on the worker thread.
    // ChannelManager retains ownership of the created channels, so clients should
    // call the appropriate Destroy*Channel method when done.
