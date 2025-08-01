@@ -675,85 +675,59 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    // ДОДАНО: Інформаційний лог про початок роботи функції
-    std::cout << "Record Track Init for track ID: " << trackId << std::endl;
-
-    // Створюємо постійні посилання на дані, щоб передати їх в інший потік
+    // Створюємо постійне посилання на callback для асинхронної роботи
     auto persistent_callback = new Napi::FunctionReference();
     *persistent_callback = Napi::Persistent(callback);
 
+    // Створюємо наш приймач (sink)
+    // Передаємо йому і лямбду для обробки, і вказівник на persistent_callback для управління пам'яттю
+    auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
+        auto* packet_data = new RtpPacketData();
+        packet_data->length = packet.size();
+        packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
+        memcpy(packet_data->data.get(), packet.data(), packet.size());
+        packet_data->timestamp = packet.Timestamp();
+        (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
+    }, persistent_callback);
 
-    std::cout << "Starting record. Dispatching sink attachment to WebRTC thread... v7-2025-08-01 15:45" << std::endl;
-
-    // ВИПРАВЛЕНО: Вся логіка тепер виконується у безпечному потоці WebRTC
-    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, persistent_callback]() {
-        std::cout << "[Thread Log] Success load dispatch fn: " << trackId << std::endl;
-        auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
-            auto* packet_data = new RtpPacketData();
-            packet_data->length = packet.size();
-            packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
-            memcpy(packet_data->data.get(), packet.data(), packet.size());
-            packet_data->timestamp = packet.Timestamp();
-            (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
-        });
-        std::cout << "[Thread Log] Success create sink: " << trackId << std::endl;
+    // Вся логіка пошуку та прив'язки виконується в потоці WebRTC, щоб уникнути гонки потоків
+    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink]() {
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
         if (!pc_interface) {
-            delete sink;
-            delete persistent_callback;
-            std::cerr << "[Thread Error] PeerConnectionInterface is null." << std::endl;
+            RTC_LOG(LS_ERROR) << "PeerConnectionInterface is null. Cannot attach sink.";
+            delete sink; // Важливо очистити пам'ять, якщо щось пішло не так
             return;
         }
-        std::cout << "[Thread Log] Success create sink: " << trackId << std::endl;
-        auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
+
+        // 1. Знаходимо потрібний транссівер за trackId
         rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
-        for (const auto& transceiver : pc_impl->GetTransceivers()) {
-            if (transceiver && transceiver->receiver() && transceiver->receiver()->track()) {
-                if (transceiver->receiver()->track()->id() == trackId) {
-                    target_transceiver = transceiver;
-                    break;
-                }
+        for (const auto& transceiver : pc_interface->GetTransceivers()) {
+            if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
+                target_transceiver = transceiver;
+                break;
             }
         }
-        std::cout << "[Thread Log] Success getting transceiver: " << trackId << std::endl;
-        // ================== ВИПРАВЛЕНА ЛОГІКА ==================
 
-            // Крок 1: Безпечне отримання channel()
-            auto* rtp_transceiver_impl = static_cast<webrtc::RtpTransceiver*>(target_transceiver.get());
-            cricket::ChannelInterface* channel_iface = rtp_transceiver_impl->channel();
+        if (!target_transceiver) {
+            RTC_LOG(LS_WARNING) << "Failed to find a valid transceiver for track ID: " << trackId;
+            delete sink;
+            return;
+        }
 
-            if (!channel_iface) {
-                std::cerr << "[Thread Error] CRITICAL: rtp_transceiver_impl->channel() returned nullptr for track ID: " << trackId << std::endl;
-                delete sink;
-                persistent_callback->Reset();
-                delete persistent_callback;
-                return;
-            }
-            std::cout << "[Thread Log] Successfully got ChannelInterface for track ID: " << trackId << std::endl;
+        // 2. Отримуємо channel та media_channel (це вже безпечно, оскільки ми в правильному потоці)
+        auto* rtp_transceiver_impl = static_cast<webrtc::RtpTransceiver*>(target_transceiver.get());
+        cricket::ChannelInterface* channel_iface = rtp_transceiver_impl->channel();
+        cricket::MediaChannel* media_channel = channel_iface ? channel_iface->media_channel() : nullptr;
 
-            std::cout << "[Thread Log] Successfully got ChannelInterface for track ID: " << trackId << std::endl;
-
-            try {
-                std::cout << "[Thread Log] Attempting to call media_type() for track ID: " << trackId << std::endl;
-                cricket::MediaType type = channel_iface->media_type();
-                std::cout << "[Thread Log] Successfully called media_type() for track ID: " << trackId << std::endl;
-
-                if (type == cricket::MEDIA_TYPE_AUDIO || type == cricket::MEDIA_TYPE_VIDEO) {
-                    // ... подальша логіка ...
-                } else {
-                    // ... подальша логіка ...
-                }
-            } catch (const std::exception& e) {
-                std::cerr << "[Thread Exception] Caught a C++ exception: " << e.what() << " for track ID: " << trackId << std::endl;
-                delete sink;
-                persistent_callback->Reset();
-                delete persistent_callback;
-            } catch (...) {
-                std::cerr << "[Thread Exception] Caught an unknown C++ exception (likely memory access violation) for track ID: " << trackId << std::endl;
-                delete sink;
-                persistent_callback->Reset();
-                delete persistent_callback;
-            }
+        if (media_channel) {
+            // 3. ВИКЛИКАЄМО НАШ НОВИЙ, БЕЗПЕЧНИЙ МЕТОД!
+            // Цей виклик більше не призведе до крешу.
+            RTC_LOG(LS_INFO) << "Attaching raw RTP sink to MediaChannel for track: " << trackId;
+            media_channel->SetRawRtpPacketSink(sink);
+        } else {
+            RTC_LOG(LS_WARNING) << "Failed to get MediaChannel for track ID: " << trackId;
+            delete sink;
+        }
     }));
 
     return env.Undefined();
