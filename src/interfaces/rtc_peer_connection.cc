@@ -693,47 +693,22 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::cout << "[AttachRawSink_LOG] Initialize sink" << std::endl;
 
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink]() {
-        // ВИКОРИСТОВУЄМО RTC_LOG ДЛЯ БЕЗПЕЧНОГО ЛОГУВАННЯ З ПОТОКІВ
-        std::cout << "[SINK_LOG] Executing Dispatch for track " << trackId << std::endl;
-
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
         if (!pc_interface) {
-            std::cerr << "[SINK_LOG] PeerConnectionInterface is null." << std::endl;
-            // Тут ми навмисно не робимо delete, щоб уникнути крешу, якщо проблема в цьому
+            delete sink;
             return;
         }
 
-        std::cout << "[SINK_LOG] Step 1: Got PeerConnectionInterface." << std::endl;
-
-        rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
-        for (const auto& transceiver : pc_interface->GetTransceivers()) {
-            if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
-                target_transceiver = transceiver;
-                break;
-            }
-        }
-
-        if (!target_transceiver) {
-            std::cerr << "[SINK_LOG] Step 2: FAILED to find transceiver." << std::endl;
-            // delete sink;
-            return;
-        }
-
-        std::cout << "[SINK_LOG] Step 2: Found transceiver." << std::endl;
-
-        auto* rtp_transceiver_impl = static_cast<webrtc::RtpTransceiver*>(target_transceiver.get());
-        std::cout << "[SINK_LOG] Step 3: Casted to RtpTransceiver." << std::endl;
-
-        cricket::ChannelInterface* channel_iface = rtp_transceiver_impl->channel();
-        std::cout << "[SINK_LOG] Step 4: Called channel(). Pointer is: " << channel_iface << std::endl;
+        // НАШ НОВИЙ, ПРОСТИЙ І БЕЗПЕЧНИЙ ПІДХІД
+        auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
+        cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
 
         if (channel_iface) {
-            std::cout << "[SINK_LOG] Step 5: channel_iface is not null. Attaching sink." << std::endl;
             channel_iface->SetRawRtpPacketSink(sink);
-            std::cout << "[SINK_LOG] Step 6: Sink attached successfully." << std::endl;
+            RTC_LOG(LS_INFO) << "Successfully attached sink to track " << trackId;
         } else {
-            std::cerr << "[SINK_LOG] Step 5: channel_iface is null." << std::endl;
-            // delete sink;
+            RTC_LOG(LS_WARNING) << "Failed to find channel for track " << trackId;
+            delete sink;
         }
     }));
 
