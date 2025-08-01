@@ -675,12 +675,11 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    RTC_LOG(LS_INFO) << "[AttachRawSink_LOG] Starting record method with trackId: " << trackId;
-
+    std::cout << "[AttachRawSink_LOG] Starting record method with trackId: " << trackId << std::endl;
     auto persistent_callback = new Napi::FunctionReference();
     *persistent_callback = Napi::Persistent(callback);
 
-    RTC_LOG(LS_INFO) << "[AttachRawSink_LOG] Setup callback";
+    std::cout << "[AttachRawSink_LOG] Setup callback" << std::endl;
 
     auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
         auto* packet_data = new RtpPacketData();
@@ -691,20 +690,20 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
         (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
     }, persistent_callback);
 
-    RTC_LOG(LS_INFO) << "[AttachRawSink_LOG] Initialize sink";
+    std::cout << "[AttachRawSink_LOG] Initialize sink" << std::endl;
 
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink]() {
         // ВИКОРИСТОВУЄМО RTC_LOG ДЛЯ БЕЗПЕЧНОГО ЛОГУВАННЯ З ПОТОКІВ
-        RTC_LOG(LS_INFO) << "[SINK_LOG] Executing Dispatch for track " << trackId;
+        std::cout << "[SINK_LOG] Executing Dispatch for track " << trackId << std::endl;
 
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
         if (!pc_interface) {
-            RTC_LOG(LS_ERROR) << "[SINK_LOG] PeerConnectionInterface is null.";
+            std::cerr << "[SINK_LOG] PeerConnectionInterface is null." << std::endl;
             // Тут ми навмисно не робимо delete, щоб уникнути крешу, якщо проблема в цьому
             return;
         }
 
-        RTC_LOG(LS_INFO) << "[SINK_LOG] Step 1: Got PeerConnectionInterface.";
+        std::cout << "[SINK_LOG] Step 1: Got PeerConnectionInterface." << std::endl;
 
         rtc::scoped_refptr<webrtc::RtpTransceiverInterface> target_transceiver;
         for (const auto& transceiver : pc_interface->GetTransceivers()) {
@@ -715,25 +714,25 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
         }
 
         if (!target_transceiver) {
-            RTC_LOG(LS_WARNING) << "[SINK_LOG] Step 2: FAILED to find transceiver.";
+            std::cerr << "[SINK_LOG] Step 2: FAILED to find transceiver." << std::endl;
             // delete sink;
             return;
         }
 
-        RTC_LOG(LS_INFO) << "[SINK_LOG] Step 2: Found transceiver.";
+        std::cout << "[SINK_LOG] Step 2: Found transceiver." << std::endl;
 
         auto* rtp_transceiver_impl = static_cast<webrtc::RtpTransceiver*>(target_transceiver.get());
-        RTC_LOG(LS_INFO) << "[SINK_LOG] Step 3: Casted to RtpTransceiver.";
+        std::cout << "[SINK_LOG] Step 3: Casted to RtpTransceiver." << std::endl;
 
         cricket::ChannelInterface* channel_iface = rtp_transceiver_impl->channel();
-        RTC_LOG(LS_INFO) << "[SINK_LOG] Step 4: Called channel(). Pointer is: " << channel_iface;
+        std::cout << "[SINK_LOG] Step 4: Called channel(). Pointer is: " << channel_iface << std::endl;
 
         if (channel_iface) {
-            RTC_LOG(LS_INFO) << "[SINK_LOG] Step 5: channel_iface is not null. Attaching sink.";
+            std::cout << "[SINK_LOG] Step 5: channel_iface is not null. Attaching sink." << std::endl;
             channel_iface->SetRawRtpPacketSink(sink);
-            RTC_LOG(LS_INFO) << "[SINK_LOG] Step 6: Sink attached successfully.";
+            std::cout << "[SINK_LOG] Step 6: Sink attached successfully." << std::endl;
         } else {
-            RTC_LOG(LS_WARNING) << "[SINK_LOG] Step 5: channel_iface is null.";
+            std::cerr << "[SINK_LOG] Step 5: channel_iface is null." << std::endl;
             // delete sink;
         }
     }));
