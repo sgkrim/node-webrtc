@@ -1,7 +1,7 @@
 #ifndef SRC_RTPSINK_H_
 #define SRC_RTPSINK_H_
 
-#include "api/rtp_packet_sink_interface.h"
+#include "call/rtp_packet_sink_interface.h"
 #include "modules/rtp_rtcp/include/rtp_packet_received.h"
 
 #include <functional>
