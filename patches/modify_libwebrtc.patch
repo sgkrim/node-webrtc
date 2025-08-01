@@ -1,0 +1,91 @@
+diff --git a/media/base/media_channel.h b/media/base/media_channel.h
+index fb52168586..264bd575f4 100644
+--- a/media/base/media_channel.h
++++ b/media/base/media_channel.h
+@@ -186,6 +186,10 @@ class MediaChannel : public sigslot::has_slots<> {
+     virtual ~NetworkInterface() {}
+   };
+ 
++  // НАША МОДИФІКАЦІЯ:
++  // Дозволяє встановити зовнішній приймач для сирих RTP-пакетів.
++  virtual void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) = 0;
++
+   explicit MediaChannel(const MediaConfig& config);
+   MediaChannel();
+   ~MediaChannel() override;
+diff --git a/pc/channel.cc b/pc/channel.cc
+index 03e63b0224..eb76c5a11a 100644
+--- a/pc/channel.cc
++++ b/pc/channel.cc
+@@ -45,6 +45,18 @@ struct SendPacketMessageData : public rtc::MessageData {
+   rtc::PacketOptions options;
+ };
+ 
++
++// НАШ КОД: Реалізація методу.
++void BaseChannel::SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) {
++  // Використовуємо Invoke, щоб безпечно встановити вказівник
++  // у тому ж потоці, де обробляються пакети (network_thread).
++  network_thread_->Invoke<void>(RTC_FROM_HERE, [this, sink] {
++    RTC_DCHECK_RUN_ON(network_thread_);
++    raw_rtp_packet_sink_ = sink;
++  });
++}
++
++
+ // Finds a stream based on target's Primary SSRC or RIDs.
+ // This struct is used in BaseChannel::UpdateLocalStreams_w.
+ struct StreamFinder {
+@@ -475,10 +487,22 @@ void BaseChannel::OnRtpPacket(const webrtc::RtpPacketReceived& parsed_packet) {
+   auto packet_buffer = parsed_packet.Buffer();
+ 
+   invoker_.AsyncInvoke<void>(
+-      RTC_FROM_HERE, worker_thread_, [this, packet_buffer, packet_time_us] {
+-        RTC_DCHECK(worker_thread_->IsCurrent());
+-        media_channel_->OnPacketReceived(packet_buffer, packet_time_us);
+-      });
++    RTC_FROM_HERE, worker_thread_,
++    [this, parsed_packet] { // <-- Змінено тут
++      RTC_DCHECK(worker_thread_->IsCurrent());
++
++      // НАШ КОД: Просто використовуємо готову копію пакета.
++      if (raw_rtp_packet_sink_) {
++        raw_rtp_packet_sink_->OnPacket(parsed_packet);
++      }
++
++      // Існуюча логіка: витягуємо дані з нашої копії пакета.
++      int64_t packet_time_us = -1;
++      if (parsed_packet.arrival_time_ms() > 0) {
++          packet_time_us = parsed_packet.arrival_time_ms() * 1000;
++      }
++      media_channel_->OnPacketReceived(parsed_packet.Buffer(), packet_time_us);
++    });
+ }
+ 
+ void BaseChannel::UpdateRtpHeaderExtensionMap(
+diff --git a/pc/channel.h b/pc/channel.h
+index 238a8e20fe..5cb46e031a 100644
+--- a/pc/channel.h
++++ b/pc/channel.h
+@@ -92,6 +92,10 @@ class BaseChannel : public ChannelInterface,
+               webrtc::CryptoOptions crypto_options,
+               rtc::UniqueRandomIdGenerator* ssrc_generator);
+   virtual ~BaseChannel();
++
++  // НАШ КОД: Оголошуємо реалізацію методу з інтерфейсу.
++  void SetRawRtpPacketSink(webrtc::RtpPacketSinkInterface* sink) override;
++
+   virtual void Init_w(
+       webrtc::RtpTransportInternal* rtp_transport,
+       const webrtc::MediaTransportConfig& media_transport_config);
+@@ -182,6 +186,10 @@ class BaseChannel : public ChannelInterface,
+   void set_remote_content_direction(webrtc::RtpTransceiverDirection direction) {
+     remote_content_direction_ = direction;
+   }
++
++  // НАШ КОД: Поле для зберігання вказівника на наш приймач.
++  webrtc::RtpPacketSinkInterface* raw_rtp_packet_sink_ = nullptr;
++
+   // These methods verify that:
+   // * The required content description directions have been set.
+   // * The channel is enabled.
