@@ -731,40 +731,40 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
             }
             std::cout << "[Thread Log] Successfully got ChannelInterface for track ID: " << trackId << std::endl;
 
-             if (!channel_iface) {
-                 std::cerr << "[Thread Error] CRITICAL: rtp_transceiver_impl->channel() returned nullptr for track ID: " << trackId << std::endl;
-                 // ... код очищення
-                 return;
-             }
-             std::cout << "[Thread Log] Successfully got ChannelInterface for track ID: " << trackId << std::endl;
+            // ================== ФІНАЛЬНЕ РІШЕННЯ ==================
 
-             // ================== НОВИЙ ВИПРАВЛЕНИЙ КОД ==================
+            // Крок 1: Використовуємо media_type() для безпечної перевірки типу каналу.
+            // Це найнадійніший спосіб у вашій версії libwebrtc.
+            cricket::MediaType type = channel_iface->media_type();
 
-             // Крок 1: Спробуємо безпечно перетворити інтерфейс до базового медіа-каналу
-             cricket::BaseChannel* base_channel = channel_iface->AsBaseChannel();
+            if (type == cricket::MEDIA_TYPE_AUDIO || type == cricket::MEDIA_TYPE_VIDEO) {
+                // Тепер, коли ми знаємо, що це медіа-канал, ми можемо безпечно викликати media_channel().
+                cricket::MediaChannel* media_channel = channel_iface->media_channel();
 
-             if (base_channel) {
-                 // Крок 2: Тепер безпечно отримуємо MediaChannel з BaseChannel
-                 cricket::MediaChannel* media_channel = base_channel->media_channel();
-
-                 if (media_channel) {
-                     std::cout << "[WebRTC Thread] MediaChannel found! Attaching sink for track " << trackId << std::endl;
-                     media_channel->SetRawRtpPacketSink(sink);
-                     std::cout << "[WebRTC Thread] Sink attached successfully. Recording should start now." << std::endl;
-                 } else {
-                     // Цей випадок малоймовірний, якщо base_channel існує, але перевірка не завадить
-                     std::cerr << "[Thread Error] CRITICAL: Failed to get MediaChannel from BaseChannel for track ID: " << trackId << std::endl;
-                     delete sink;
-                     persistent_callback->Reset();
-                     delete persistent_callback;
-                 }
-             } else {
-                 // Це означає, що канал не є медіа-каналом (ймовірно, це SCTP для DataChannel)
-                 std::cerr << "[Thread Warning] Channel for track ID " << trackId << " is not a BaseChannel (likely a DataChannel). Skipping sink attachment." << std::endl;
-                 delete sink;
-                 persistent_callback->Reset();
-                 delete persistent_callback;
-             }
+                if (media_channel) {
+                    std::cout << "[WebRTC Thread] MediaChannel of type " << (type == cricket::MEDIA_TYPE_AUDIO ? "AUDIO" : "VIDEO")
+                              << " found! Attaching sink for track " << trackId << std::endl;
+                    // ВАЖЛИВО: Ваша версія SetRawRtpPacketSink визначена в ChannelInterface, не в MediaChannel.
+                    // Тому викликаємо її з channel_iface.
+                    channel_iface->SetRawRtpPacketSink(sink);
+                    std::cout << "[WebRTC Thread] Sink attached successfully. Recording should start now." << std::endl;
+                    // ВАЖЛИВО: Не видаляємо sink та persistent_callback, оскільки ними тепер володіє канал.
+                } else {
+                    // Ця ситуація не мала б трапитись, якщо media_type() коректний,
+                    // але це гарна захисна перевірка.
+                    std::cerr << "[Thread Error] CRITICAL: Channel is media type, but media_channel() returned nullptr for track ID: " << trackId << std::endl;
+                    delete sink;
+                    persistent_callback->Reset();
+                    delete persistent_callback;
+                }
+            } else {
+                // Канал не є аудіо або відео. Ймовірно, це DataChannel (cricket::MEDIA_TYPE_DATA).
+                std::cerr << "[Thread Warning] Channel for track ID " << trackId
+                          << " is not a media channel (type: " << type << "). Skipping sink attachment." << std::endl;
+                delete sink;
+                persistent_callback->Reset();
+                delete persistent_callback;
+            }
     }));
 
     return env.Undefined();
