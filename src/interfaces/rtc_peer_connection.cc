@@ -688,6 +688,8 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
+    std::cout << "Starting record for trackId: " << trackId << std::endl;
+
     auto persistent_callback = std::make_unique<Napi::FunctionReference>();
     *persistent_callback = Napi::Persistent(callback);
 
