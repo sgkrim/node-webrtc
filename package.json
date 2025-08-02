@@ -22,7 +22,7 @@
     "module_name": "wrtc",
     "module_path": "./build/{configuration}/",
     "remote_path": "./binary/{module_name}/v{version}/{configuration}/",
-    "package_name": "{platform}-{arch}.tar.gz?v25",
+    "package_name": "{platform}-{arch}.tar.gz?v27",
     "host": "https://minex.pp.ua"
   },
   "engines": {
@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "nan": "^2.3.2",
-    "node-addon-api": "^1.6.2",
+    "node-addon-api": "^4.0.0",
     "node-cmake": "2.3.2",
     "node-pre-gyp": "^0.13.0"
   },

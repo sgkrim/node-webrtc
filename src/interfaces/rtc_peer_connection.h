@@ -119,8 +119,10 @@ class RTCPeerConnection
 
   RTCSessionDescriptionInit _lastSdp;
 
-  std::vector<std::unique_ptr<Napi::FunctionReference>> _persistent_callbacks;
+  // Зберігаємо sink-и, щоб вони були живі, поки PeerConnection існує.
   std::vector<std::unique_ptr<RtpPacketSink>> _sinks;
+  // Зберігаємо потоко-безпечні функції за trackId.
+  std::map<std::string, Napi::ThreadSafeFunction> _tsfns;
 
   UnsignedShortRange _port_range;
   ExtendedRTCConfiguration _cached_configuration;

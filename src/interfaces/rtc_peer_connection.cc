@@ -623,8 +623,11 @@ Napi::Value RTCPeerConnection::Close(const Napi::CallbackInfo& info) {
     _factory = nullptr;
   }
 
+for (auto& pair : _tsfns) {
+    pair.second.Release();
+  }
+  _tsfns.clear();
   _sinks.clear();
-  _persistent_callbacks.clear();
 
   return info.Env().Undefined();
 }
@@ -688,42 +691,62 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    std::cout << "Starting record for trackId: " << trackId << std::endl;
+    std::cout << "v2. Starting record for trackId: " << trackId << std::endl;
 
-    auto persistent_callback = std::make_unique<Napi::FunctionReference>();
-    *persistent_callback = Napi::Persistent(callback);
+    struct RtpPacketContext {
+      size_t length;
+      uint32_t timestamp;
+      std::unique_ptr<uint8_t[]> data;
+    };
 
-    auto sink = std::make_unique<RtpPacketSink>([this, cb = persistent_callback.get()](const webrtc::RtpPacketReceived& packet) {
-        auto* packet_data = new RtpPacketData();
-        packet_data->length = packet.size();
-        packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
-        memcpy(packet_data->data.get(), packet.data(), packet.size());
-        packet_data->timestamp = packet.Timestamp();
+    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
+        env,
+        callback,
+        "RtpPacketCallback",
+        0,
+        1,
+        [trackId, this](Napi::Env) {
+          // ВИПРАВЛЕНО: EventLoop -> event_loop
+          this->Dispatch(CreateCallback<RTCPeerConnection>([this, trackId]() {
+            this->_tsfns.erase(trackId);
+          }));
+        });
 
-        // Змінено: Передаємо Env в конструктор OnPacketWorker
-        (new OnPacketWorker(this->Env(), *cb, packet_data))->Queue();
-    });
+    auto on_packet_callback = [tsfn](const webrtc::RtpPacketReceived& packet) {
+        auto* context = new RtpPacketContext();
+        context->length = packet.size();
+        context->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
+        memcpy(context->data.get(), packet.data(), packet.size());
+        context->timestamp = packet.Timestamp();
 
+        tsfn.NonBlockingCall(context, [](Napi::Env env, Napi::Function jsCallback, RtpPacketContext* ctx) {
+            Napi::HandleScope scope(env);
+            Napi::Object packet_obj = Napi::Object::New(env);
+            packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(
+                env,
+                ctx->data.release(),
+                ctx->length,
+                [](Napi::Env, uint8_t* d) { delete[] d; }
+            ));
+            packet_obj.Set("timestamp", Napi::Number::New(env, ctx->timestamp));
+            jsCallback.Call({packet_obj});
+            delete ctx;
+        });
+    };
+
+    auto sink = std::make_unique<RtpPacketSink>(on_packet_callback);
     RtpPacketSink* sink_ptr = sink.get();
 
-    _persistent_callbacks.push_back(std::move(persistent_callback));
     _sinks.push_back(std::move(sink));
+    _tsfns[trackId] = tsfn;
 
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink_ptr]() {
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
-        if (!pc_interface) {
-            RTC_LOG(LS_ERROR) << "Cannot attach sink: PeerConnectionInterface is null.";
-            return;
-        }
-
+        if (!pc_interface) { return; }
         auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
         cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
-
         if (channel_iface) {
             channel_iface->SetRawRtpPacketSink(sink_ptr);
-            RTC_LOG(LS_INFO) << "Successfully attached sink to track " << trackId;
-        } else {
-            RTC_LOG(LS_WARNING) << "Failed to find channel for track " << trackId;
         }
     }));
 

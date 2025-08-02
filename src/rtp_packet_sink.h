@@ -5,19 +5,31 @@
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
 #include <functional>
 
-// БІЛЬШЕ НЕ ПОТРІБЕН #include "src/node_webrtc.h"
-
+/**
+ * RtpPacketSink - це простий C++ клас, який реалізує інтерфейс libwebrtc
+ * для отримання сирих RTP-пакетів. Він викликає наданий C++ callback
+ * для кожного отриманого пакету. Цей клас нічого не знає про Node.js або N-API.
+ */
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
  public:
   using OnRtpPacketCallback = std::function<void(const webrtc::RtpPacketReceived&)>;
 
-  // Конструктор тепер приймає ЛИШЕ C++ лямбду
+  /**
+   * Конструктор приймає лише C++ лямбду (callback).
+   * @param on_packet функція, яка буде викликана при отриманні пакету.
+   */
   explicit RtpPacketSink(OnRtpPacketCallback on_packet)
       : _on_packet(on_packet) {}
 
-  // Деструктор тепер порожній
+  /**
+   * Деструктор за замовчуванням.
+   */
   ~RtpPacketSink() override = default;
 
+  /**
+   * Метод, який викликається libwebrtc при отриманні нового RTP-пакету.
+   * @param packet отриманий RTP-пакет.
+   */
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override {
     if (_on_packet) {
       _on_packet(packet);
@@ -26,7 +38,6 @@ class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
 
  private:
   OnRtpPacketCallback _on_packet;
-  // Поле _persistent_callback видалено
 };
 
 #endif  // SRC_RTPSINK_H_
