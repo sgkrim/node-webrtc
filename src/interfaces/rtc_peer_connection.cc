@@ -645,10 +645,15 @@ struct RtpPacketData {
 
 class OnPacketWorker : public Napi::AsyncWorker {
  public:
-  OnPacketWorker(const Napi::Function& callback, RtpPacketData* data)
-    : Napi::AsyncWorker(callback), _data(data) {}
+  // Змінено: Конструктор приймає Env і FunctionReference,
+  // але викликає базовий конструктор ЛИШЕ з Env.
+  OnPacketWorker(Napi::Env env, Napi::FunctionReference& callback, RtpPacketData* data)
+    : Napi::AsyncWorker(env), _callback(callback), _data(data) {}
+
   ~OnPacketWorker() override = default;
+
   void Execute() override {}
+
   void OnOK() override {
     Napi::HandleScope scope(Env());
     Napi::Object packet_obj = Napi::Object::New(Env());
@@ -659,10 +664,14 @@ class OnPacketWorker : public Napi::AsyncWorker {
       [](Napi::Env, uint8_t* d) { delete[] d; }
     ));
     packet_obj.Set("timestamp", Napi::Number::New(Env(), _data->timestamp));
-    Callback().Call({packet_obj});
+
+    // Змінено: Викликаємо колбек, який зберегли самі, а не через базовий клас.
+    _callback.Value().Call({packet_obj});
     delete _data;
   }
  private:
+  // Зберігаємо посилання на колбек самі.
+  Napi::FunctionReference& _callback;
   RtpPacketData* _data;
 };
 
@@ -679,28 +688,25 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    // Крок 1: Створюємо розумні вказівники для автоматичного управління пам'яттю
     auto persistent_callback = std::make_unique<Napi::FunctionReference>();
     *persistent_callback = Napi::Persistent(callback);
 
-    auto sink = std::make_unique<RtpPacketSink>([cb = persistent_callback.get()](const webrtc::RtpPacketReceived& packet) {
-        // ПОВНИЙ КОД ЛЯМБДИ: Тепер ми використовуємо 'packet'
+    auto sink = std::make_unique<RtpPacketSink>([this, cb = persistent_callback.get()](const webrtc::RtpPacketReceived& packet) {
         auto* packet_data = new RtpPacketData();
         packet_data->length = packet.size();
         packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
         memcpy(packet_data->data.get(), packet.data(), packet.size());
         packet_data->timestamp = packet.Timestamp();
-        (new OnPacketWorker(cb->Value(), packet_data))->Queue();
+
+        // Змінено: Передаємо Env в конструктор OnPacketWorker
+        (new OnPacketWorker(this->Env(), *cb, packet_data))->Queue();
     });
 
-    // Крок 2: Отримуємо сирий вказівник, щоб передати його в libwebrtc (який не приймає unique_ptr)
     RtpPacketSink* sink_ptr = sink.get();
 
-    // Крок 3: Зберігаємо володіння об'єктами в нашому класі, щоб вони не були видалені передчасно
     _persistent_callbacks.push_back(std::move(persistent_callback));
     _sinks.push_back(std::move(sink));
 
-    // Крок 4: Асинхронно прив'язуємо sink в потоці WebRTC
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink_ptr]() {
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
         if (!pc_interface) {
@@ -708,7 +714,6 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
             return;
         }
 
-        // ПОВНИЙ КОД ЛЯМБДИ: Тепер ми оголошуємо 'channel_iface'
         auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
         cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
 
@@ -717,7 +722,6 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
             RTC_LOG(LS_INFO) << "Successfully attached sink to track " << trackId;
         } else {
             RTC_LOG(LS_WARNING) << "Failed to find channel for track " << trackId;
-            // `delete sink` не потрібен, оскільки unique_ptr керує пам'яттю
         }
     }));
 
