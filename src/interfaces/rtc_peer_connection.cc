@@ -623,6 +623,9 @@ Napi::Value RTCPeerConnection::Close(const Napi::CallbackInfo& info) {
     _factory = nullptr;
   }
 
+  _sinks.clear();
+  _persistent_callbacks.clear();
+
   return info.Env().Undefined();
 }
 
@@ -664,6 +667,7 @@ class OnPacketWorker : public Napi::AsyncWorker {
 };
 
 // Реалізація методу AttachRawSink
+
 Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
@@ -675,40 +679,45 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    std::cout << "[AttachRawSink_LOG] Starting record method with trackId: " << trackId << std::endl;
-    auto persistent_callback = new Napi::FunctionReference();
+    // Крок 1: Створюємо розумні вказівники для автоматичного управління пам'яттю
+    auto persistent_callback = std::make_unique<Napi::FunctionReference>();
     *persistent_callback = Napi::Persistent(callback);
 
-    std::cout << "[AttachRawSink_LOG] Setup callback" << std::endl;
-
-    auto sink = new RtpPacketSink([this, persistent_callback](const webrtc::RtpPacketReceived& packet) {
+    auto sink = std::make_unique<RtpPacketSink>([cb = persistent_callback.get()](const webrtc::RtpPacketReceived& packet) {
+        // ПОВНИЙ КОД ЛЯМБДИ: Тепер ми використовуємо 'packet'
         auto* packet_data = new RtpPacketData();
         packet_data->length = packet.size();
         packet_data->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
         memcpy(packet_data->data.get(), packet.data(), packet.size());
         packet_data->timestamp = packet.Timestamp();
-        (new OnPacketWorker(persistent_callback->Value(), packet_data))->Queue();
-    }, persistent_callback);
+        (new OnPacketWorker(cb->Value(), packet_data))->Queue();
+    });
 
-    std::cout << "[AttachRawSink_LOG] Initialize sink" << std::endl;
+    // Крок 2: Отримуємо сирий вказівник, щоб передати його в libwebrtc (який не приймає unique_ptr)
+    RtpPacketSink* sink_ptr = sink.get();
 
-    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink]() {
+    // Крок 3: Зберігаємо володіння об'єктами в нашому класі, щоб вони не були видалені передчасно
+    _persistent_callbacks.push_back(std::move(persistent_callback));
+    _sinks.push_back(std::move(sink));
+
+    // Крок 4: Асинхронно прив'язуємо sink в потоці WebRTC
+    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink_ptr]() {
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
         if (!pc_interface) {
-            delete sink;
+            RTC_LOG(LS_ERROR) << "Cannot attach sink: PeerConnectionInterface is null.";
             return;
         }
 
-        // НАШ НОВИЙ, ПРОСТИЙ І БЕЗПЕЧНИЙ ПІДХІД
+        // ПОВНИЙ КОД ЛЯМБДИ: Тепер ми оголошуємо 'channel_iface'
         auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
         cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
 
         if (channel_iface) {
-            channel_iface->SetRawRtpPacketSink(sink);
+            channel_iface->SetRawRtpPacketSink(sink_ptr);
             RTC_LOG(LS_INFO) << "Successfully attached sink to track " << trackId;
         } else {
             RTC_LOG(LS_WARNING) << "Failed to find channel for track " << trackId;
-            delete sink;
+            // `delete sink` не потрібен, оскільки unique_ptr керує пам'яттю
         }
     }));
 

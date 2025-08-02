@@ -16,6 +16,7 @@
 #include "src/node/async_object_wrap_with_loop.h"
 #include "src/dictionaries/node_webrtc/extended_rtc_configuration.h"
 #include "src/dictionaries/node_webrtc/rtc_session_description_init.h"
+#include "src/rtp_packet_sink.h"
 
 namespace webrtc {
 
@@ -117,6 +118,9 @@ class RTCPeerConnection
   Napi::Value GetIceGatheringState(const Napi::CallbackInfo&);
 
   RTCSessionDescriptionInit _lastSdp;
+
+  std::vector<std::unique_ptr<Napi::FunctionReference>> _persistent_callbacks;
+  std::vector<std::unique_ptr<RtpPacketSink>> _sinks;
 
   UnsignedShortRange _port_range;
   ExtendedRTCConfiguration _cached_configuration;
