@@ -691,67 +691,54 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    std::cout << "v4. Starting record for trackId: " << trackId << std::endl;
+    std::cout << "v5. Starting record for trackId: " << trackId << std::endl;
 
-    struct FrameContext {
-      std::vector<uint8_t> frame_data;
-      uint32_t timestamp;
-    };
-
+    // Створюємо потоко-безпечну функцію для виклику JS з іншого потоку
     Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
         env,
         callback,
-        "RtpFrameCallback",
+        "RtpPacketCallback",
         0,
         1,
         [trackId, this](Napi::Env) {
+          // Цей блок викликається, коли tsfn знищується
           this->Dispatch(CreateCallback<RTCPeerConnection>([this, trackId]() {
               this->_tsfns.erase(trackId);
           }));
         });
 
-    auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame, uint32_t timestamp) {
-        auto* context = new FrameContext();
-        context->frame_data = frame;
-        context->timestamp = timestamp;
+    _tsfns[trackId] = tsfn;
 
-        tsfn.NonBlockingCall(context, [](Napi::Env env, Napi::Function jsCallback, FrameContext* ctx) {
+    // Колбек, який буде викликатись з RtpPacketSink
+    auto on_packet_callback = [tsfn](const std::vector<uint8_t>& packet) {
+        // Копіюємо дані пакета в купу, щоб вони були доступні в іншому потоці
+        auto* packet_copy = new std::vector<uint8_t>(packet);
+
+        // Неблокуючий виклик JS-колбеку
+        tsfn.NonBlockingCall(packet_copy, [](Napi::Env env, Napi::Function jsCallback, std::vector<uint8_t>* pkt) {
             Napi::HandleScope scope(env);
-            Napi::Object frame_obj = Napi::Object::New(env);
-            frame_obj.Set("payload", Napi::Buffer<uint8_t>::Copy(env, ctx->frame_data.data(), ctx->frame_data.size()));
-            frame_obj.Set("timestamp", Napi::Number::New(env, ctx->timestamp));
-            jsCallback.Call({frame_obj});
-            delete ctx;
+            // Створюємо Buffer з даних пакета і викликаємо JS-колбек
+            jsCallback.Call({Napi::Buffer<uint8_t>::Copy(env, pkt->data(), pkt->size())});
+            delete pkt; // Звільняємо пам'ять
         });
     };
 
-    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_frame_callback]() {
+    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_packet_callback]() {
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
         if (!pc_interface) { return; }
 
-        bool is_audio = false;
-        bool track_found = false;
-        for (const auto& transceiver : pc_interface->GetTransceivers()) {
-            if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
-                is_audio = (transceiver->receiver()->track()->kind() == "audio");
-                track_found = true;
-                break;
-            }
-        }
-
-        if (!track_found) {
-            RTC_LOG(LS_WARNING) << "Track not found, cannot attach sink: " << trackId;
-            return;
-        }
-
-        auto sink = std::make_unique<RtpPacketSink>(on_frame_callback, is_audio);
+        // Створюємо наш sink з новим колбеком
+        auto sink = std::make_unique<RtpPacketSink>(on_packet_callback);
         RtpPacketSink* sink_ptr = sink.get();
         this->_sinks.push_back(std::move(sink));
 
+        // Знаходимо потрібний канал і підключаємо до нього наш sink
         auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
         cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
         if (channel_iface) {
             channel_iface->SetRawRtpPacketSink(sink_ptr);
+        } else {
+             RTC_LOG(LS_WARNING) << "Channel not found for trackId: " << trackId;
         }
     }));
 

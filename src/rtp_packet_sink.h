@@ -8,40 +8,31 @@
 
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
  public:
-  // Колбек тепер буде викликатись з повним кадром, а не з пакетом
-  using OnFrameCallback = std::function<void(const std::vector<uint8_t>&, uint32_t)>;
+  // Колбек тепер буде викликатись з повним RTP-пакетом
+  using OnPacketCallback = std::function<void(const std::vector<uint8_t>&)>;
 
-  // ЗМІНЕНО: Додаємо прапорець is_audio в конструктор
-  explicit RtpPacketSink(OnFrameCallback on_frame, bool is_audio)
-      : _on_frame(on_frame), _is_audio(is_audio) {}
+  explicit RtpPacketSink(OnPacketCallback on_packet)
+      : _on_packet(on_packet) {}
 
   ~RtpPacketSink() override = default;
 
-  // Цей метод тепер має різну логіку для аудіо та відео
+  // Цей метод тепер просто перенаправляє повний пакет
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override {
-    if (_is_audio) {
-      // Для АУДІО: кожен пакет - це кадр. Віддаємо одразу корисне навантаження.
-      auto payload = packet.payload();
-      std::vector<uint8_t> frame(payload.begin(), payload.end());
-      if (_on_frame) {
-        _on_frame(frame, packet.Timestamp());
-      }
-    } else {
-      // Для ВІДЕО: збираємо пакети в кадри за маркерним бітом.
-      _frame_buffer.insert(_frame_buffer.end(), packet.payload().begin(), packet.payload().end());
-      if (packet.Marker()) {
-        if (_on_frame) {
-          _on_frame(_frame_buffer, packet.Timestamp());
-        }
-        _frame_buffer.clear();
-      }
+    if (_on_packet) {
+      // ✅ ВИПРАВЛЕННЯ:
+      // Отримуємо вказівник на дані та їх розмір
+      const uint8_t* data = packet.data();
+      size_t size = packet.size();
+
+      // Створюємо вектор, копіюючи дані з пам'яті за допомогою вказівника та розміру
+      std::vector<uint8_t> full_packet(data, data + size);
+
+      _on_packet(full_packet);
     }
   }
 
  private:
-  OnFrameCallback _on_frame;
-  bool _is_audio; // Прапорець для визначення типу потоку
-  std::vector<uint8_t> _frame_buffer;
+  OnPacketCallback _on_packet;
 };
 
 #endif  // SRC_RTPSINK_H_
