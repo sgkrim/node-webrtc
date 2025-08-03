@@ -4,40 +4,37 @@
 #include "call/rtp_packet_sink_interface.h"
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
 #include <functional>
+#include <vector>
 
-/**
- * RtpPacketSink - це простий C++ клас, який реалізує інтерфейс libwebrtc
- * для отримання сирих RTP-пакетів. Він викликає наданий C++ callback
- * для кожного отриманого пакету. Цей клас нічого не знає про Node.js або N-API.
- */
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
  public:
-  using OnRtpPacketCallback = std::function<void(const webrtc::RtpPacketReceived&)>;
+  // Змінено: Колбек тепер буде викликатись з повним кадром, а не з пакетом
+  using OnFrameCallback = std::function<void(const std::vector<uint8_t>&, uint32_t)>;
 
-  /**
-   * Конструктор приймає лише C++ лямбду (callback).
-   * @param on_packet функція, яка буде викликана при отриманні пакету.
-   */
-  explicit RtpPacketSink(OnRtpPacketCallback on_packet)
-      : _on_packet(on_packet) {}
+  explicit RtpPacketSink(OnFrameCallback on_frame)
+      : _on_frame(on_frame) {}
 
-  /**
-   * Деструктор за замовчуванням.
-   */
   ~RtpPacketSink() override = default;
 
-  /**
-   * Метод, який викликається libwebrtc при отриманні нового RTP-пакету.
-   * @param packet отриманий RTP-пакет.
-   */
+  // Цей метод тепер збирає пакети в кадри
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override {
-    if (_on_packet) {
-      _on_packet(packet);
+    // Додаємо корисне навантаження (payload) в буфер
+    _frame_buffer.insert(_frame_buffer.end(), packet.payload().begin(), packet.payload().end());
+
+    // Якщо це останній пакет кадру (є маркерний біт)
+    if (packet.Marker()) {
+      if (_on_frame) {
+        // Викликаємо колбек з повним кадром і часовою міткою
+        _on_frame(_frame_buffer, packet.Timestamp());
+      }
+      // Очищуємо буфер для наступного кадру
+      _frame_buffer.clear();
     }
   }
 
  private:
-  OnRtpPacketCallback _on_packet;
+  OnFrameCallback _on_frame;
+  std::vector<uint8_t> _frame_buffer;
 };
 
 #endif  // SRC_RTPSINK_H_

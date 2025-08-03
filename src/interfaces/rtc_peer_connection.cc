@@ -691,50 +691,40 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    std::cout << "v2. Starting record for trackId: " << trackId << std::endl;
+    std::cout << "v3. Starting record for trackId: " << trackId << std::endl;
 
-    struct RtpPacketContext {
-      size_t length;
+    // Змінено: Контекст тепер для кадру, а не пакета
+    struct FrameContext {
+      std::vector<uint8_t> frame_data;
       uint32_t timestamp;
-      std::unique_ptr<uint8_t[]> data;
     };
 
     Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
-        env,
-        callback,
-        "RtpPacketCallback",
-        0,
-        1,
+        env, callback, "RtpFrameCallback", 0, 1,
         [trackId, this](Napi::Env) {
-          // ВИПРАВЛЕНО: EventLoop -> event_loop
           this->Dispatch(CreateCallback<RTCPeerConnection>([this, trackId]() {
             this->_tsfns.erase(trackId);
           }));
         });
 
-    auto on_packet_callback = [tsfn](const webrtc::RtpPacketReceived& packet) {
-        auto* context = new RtpPacketContext();
-        context->length = packet.size();
-        context->data = std::unique_ptr<uint8_t[]>(new uint8_t[packet.size()]);
-        memcpy(context->data.get(), packet.data(), packet.size());
-        context->timestamp = packet.Timestamp();
+    // Змінено: Лямбда тепер приймає кадр (вектор байтів) і часову мітку
+    auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame, uint32_t timestamp) {
+        auto* context = new FrameContext();
+        context->frame_data = frame;
+        context->timestamp = timestamp;
 
-        tsfn.NonBlockingCall(context, [](Napi::Env env, Napi::Function jsCallback, RtpPacketContext* ctx) {
+        tsfn.NonBlockingCall(context, [](Napi::Env env, Napi::Function jsCallback, FrameContext* ctx) {
             Napi::HandleScope scope(env);
-            Napi::Object packet_obj = Napi::Object::New(env);
-            packet_obj.Set("payload", Napi::Buffer<uint8_t>::New(
-                env,
-                ctx->data.release(),
-                ctx->length,
-                [](Napi::Env, uint8_t* d) { delete[] d; }
-            ));
-            packet_obj.Set("timestamp", Napi::Number::New(env, ctx->timestamp));
-            jsCallback.Call({packet_obj});
+            Napi::Object frame_obj = Napi::Object::New(env);
+            // Передаємо дані кадру як Buffer
+            frame_obj.Set("payload", Napi::Buffer<uint8_t>::Copy(env, ctx->frame_data.data(), ctx->frame_data.size()));
+            frame_obj.Set("timestamp", Napi::Number::New(env, ctx->timestamp));
+            jsCallback.Call({frame_obj});
             delete ctx;
         });
     };
 
-    auto sink = std::make_unique<RtpPacketSink>(on_packet_callback);
+    auto sink = std::make_unique<RtpPacketSink>(on_frame_callback);
     RtpPacketSink* sink_ptr = sink.get();
 
     _sinks.push_back(std::move(sink));
