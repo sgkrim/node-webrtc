@@ -8,32 +8,39 @@
 
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
  public:
-  // Змінено: Колбек тепер буде викликатись з повним кадром, а не з пакетом
+  // Колбек тепер буде викликатись з повним кадром, а не з пакетом
   using OnFrameCallback = std::function<void(const std::vector<uint8_t>&, uint32_t)>;
 
-  explicit RtpPacketSink(OnFrameCallback on_frame)
-      : _on_frame(on_frame) {}
+  // ЗМІНЕНО: Додаємо прапорець is_audio в конструктор
+  explicit RtpPacketSink(OnFrameCallback on_frame, bool is_audio)
+      : _on_frame(on_frame), _is_audio(is_audio) {}
 
   ~RtpPacketSink() override = default;
 
-  // Цей метод тепер збирає пакети в кадри
+  // Цей метод тепер має різну логіку для аудіо та відео
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override {
-    // Додаємо корисне навантаження (payload) в буфер
-    _frame_buffer.insert(_frame_buffer.end(), packet.payload().begin(), packet.payload().end());
-
-    // Якщо це останній пакет кадру (є маркерний біт)
-    if (packet.Marker()) {
+    if (_is_audio) {
+      // Для АУДІО: кожен пакет - це кадр. Віддаємо одразу корисне навантаження.
+      auto payload = packet.payload();
+      std::vector<uint8_t> frame(payload.begin(), payload.end());
       if (_on_frame) {
-        // Викликаємо колбек з повним кадром і часовою міткою
-        _on_frame(_frame_buffer, packet.Timestamp());
+        _on_frame(frame, packet.Timestamp());
       }
-      // Очищуємо буфер для наступного кадру
-      _frame_buffer.clear();
+    } else {
+      // Для ВІДЕО: збираємо пакети в кадри за маркерним бітом.
+      _frame_buffer.insert(_frame_buffer.end(), packet.payload().begin(), packet.payload().end());
+      if (packet.Marker()) {
+        if (_on_frame) {
+          _on_frame(_frame_buffer, packet.Timestamp());
+        }
+        _frame_buffer.clear();
+      }
     }
   }
 
  private:
   OnFrameCallback _on_frame;
+  bool _is_audio; // Прапорець для визначення типу потоку
   std::vector<uint8_t> _frame_buffer;
 };
 

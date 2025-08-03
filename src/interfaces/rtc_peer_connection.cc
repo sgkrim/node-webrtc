@@ -691,23 +691,25 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    std::cout << "v3. Starting record for trackId: " << trackId << std::endl;
+    std::cout << "v4. Starting record for trackId: " << trackId << std::endl;
 
-    // Змінено: Контекст тепер для кадру, а не пакета
     struct FrameContext {
       std::vector<uint8_t> frame_data;
       uint32_t timestamp;
     };
 
     Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
-        env, callback, "RtpFrameCallback", 0, 1,
+        env,
+        callback,
+        "RtpFrameCallback",
+        0,
+        1,
         [trackId, this](Napi::Env) {
           this->Dispatch(CreateCallback<RTCPeerConnection>([this, trackId]() {
-            this->_tsfns.erase(trackId);
+              this->_tsfns.erase(trackId);
           }));
         });
 
-    // Змінено: Лямбда тепер приймає кадр (вектор байтів) і часову мітку
     auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame, uint32_t timestamp) {
         auto* context = new FrameContext();
         context->frame_data = frame;
@@ -716,7 +718,6 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
         tsfn.NonBlockingCall(context, [](Napi::Env env, Napi::Function jsCallback, FrameContext* ctx) {
             Napi::HandleScope scope(env);
             Napi::Object frame_obj = Napi::Object::New(env);
-            // Передаємо дані кадру як Buffer
             frame_obj.Set("payload", Napi::Buffer<uint8_t>::Copy(env, ctx->frame_data.data(), ctx->frame_data.size()));
             frame_obj.Set("timestamp", Napi::Number::New(env, ctx->timestamp));
             jsCallback.Call({frame_obj});
@@ -724,15 +725,29 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
         });
     };
 
-    auto sink = std::make_unique<RtpPacketSink>(on_frame_callback);
-    RtpPacketSink* sink_ptr = sink.get();
-
-    _sinks.push_back(std::move(sink));
-    _tsfns[trackId] = tsfn;
-
-    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, sink_ptr]() {
+    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_frame_callback]() {
         webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
         if (!pc_interface) { return; }
+
+        bool is_audio = false;
+        bool track_found = false;
+        for (const auto& transceiver : pc_interface->GetTransceivers()) {
+            if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
+                is_audio = (transceiver->receiver()->track()->kind() == "audio");
+                track_found = true;
+                break;
+            }
+        }
+
+        if (!track_found) {
+            RTC_LOG(LS_WARNING) << "Track not found, cannot attach sink: " << trackId;
+            return;
+        }
+
+        auto sink = std::make_unique<RtpPacketSink>(on_frame_callback, is_audio);
+        RtpPacketSink* sink_ptr = sink.get();
+        this->_sinks.push_back(std::move(sink));
+
         auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
         cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
         if (channel_iface) {
