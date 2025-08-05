@@ -734,6 +734,7 @@ Napi::Value RTCPeerConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
         Napi::TypeError::New(env, "attachFrameSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
         return env.Undefined();
     }
+    std::cout << "Run frame getter. Version 2.0" << std::endl;
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
