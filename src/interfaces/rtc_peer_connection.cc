@@ -729,7 +729,7 @@ Napi::Value RTCPeerConnection::AttachRtpSink(const Napi::CallbackInfo& info) {
 
 // МЕТОД 2: ОТРИМАННЯ ЧИСТИХ КАДРІВ (сам знаходить PT)
 // ЗАМІНІТЬ ВАШ AttachFrameSink НА ЦЕЙ КОД
-Napi::Value RTCP_erConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
+Napi::Value RTCPeerConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
         Napi::TypeError::New(env, "attachFrameSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
@@ -760,9 +760,18 @@ Napi::Value RTCP_erConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
         for (const auto& transceiver : _jinglePeerConnection->GetTransceivers()) {
             if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
                 track_found_in_transceivers = true;
-                is_audio = (transceiver->receiver()->track()->kind() == webrtc::MediaStreamTrackInterface::kAudioKind);
-                codec_name = is_audio ? "opus" : "vp8";
-                if (_payload_types.count(codec_name)) {
+                if (is_audio) {
+                    codec_name = "opus";
+                } else {
+                    // Перевіряємо, який відеокодек є в нашому SDP
+                    if (_payload_types.count("h264")) {
+                        codec_name = "h264";
+                    } else if (_payload_types.count("vp8")) {
+                        codec_name = "vp8";
+                    }
+                }
+
+                if (!codec_name.empty() && _payload_types.count(codec_name)) {
                     payload_type = _payload_types[codec_name];
                 }
                 break;
@@ -808,7 +817,8 @@ void RTCPeerConnection::ParseSdpForPayloadTypes(const std::string& sdp) {
     _payload_types.clear();
     // Регулярний вираз для пошуку рядків типу "a=rtpmap:111 opus/48000/2"
     // Він знаходить числа, за якими йде "opus" або "vp8", ігноруючи регістр
-    std::regex rtpmap_regex("a=rtpmap:(\\d+)\\s+(opus|VP8)\\/", std::regex_constants::icase);
+    // VVV Тепер шукаємо opus, VP8, АБО H264 VVV
+    std::regex rtpmap_regex("a=rtpmap:(\\d+)\\s+(opus|VP8|H264)\\/", std::regex_constants::icase);
 
     std::istringstream sdp_stream(sdp);
     std::string line;

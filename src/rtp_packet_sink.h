@@ -26,7 +26,7 @@ class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override {
 
 
-    if (!_is_audio) {
+    if (_is_audio) {
         std::cout << "[RtpPacketSink] PRE-FILTER - Received packet with PT: " << (int)packet.PayloadType()
                          << ", Expected PT: " << (int)_payload_type << std::endl;
     }
