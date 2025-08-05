@@ -101,7 +101,10 @@ class RTCPeerConnection
   Napi::Value Close(const Napi::CallbackInfo&);
   Napi::Value RestartIce(const Napi::CallbackInfo&);
 
-  Napi::Value AttachRawSink(const Napi::CallbackInfo&);
+  Napi::Value AttachRtpSink(const Napi::CallbackInfo& info);
+  Napi::Value AttachFrameSink(const Napi::CallbackInfo& info);
+  Napi::Value GetPayloadTypes(const Napi::CallbackInfo&);
+
   Napi::Value GetCustomMethodExists(const Napi::CallbackInfo& info);
 
   Napi::Value GetCanTrickleIceCandidates(const Napi::CallbackInfo&);
@@ -119,9 +122,11 @@ class RTCPeerConnection
 
   RTCSessionDescriptionInit _lastSdp;
 
+  void ParseSdpForPayloadTypes(const std::string& sdp);
+  std::map<std::string, uint8_t> _payload_types;
+
   // Зберігаємо sink-и, щоб вони були живі, поки PeerConnection існує.
   std::vector<std::unique_ptr<RtpPacketSink>> _sinks;
-  // Зберігаємо потоко-безпечні функції за trackId.
   std::map<std::string, Napi::ThreadSafeFunction> _tsfns;
 
   UnsignedShortRange _port_range;

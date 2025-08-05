@@ -6,33 +6,64 @@
 #include <functional>
 #include <vector>
 
+// Перерахування для вибору режиму роботи
+enum class SinkMode {
+  RtpPacket, // Режим передачі повних RTP-пакетів
+  CodecFrame // Режим збирання та передачі чистих кадрів кодека
+};
+
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
  public:
-  // Колбек тепер буде викликатись з повним RTP-пакетом
-  using OnPacketCallback = std::function<void(const std::vector<uint8_t>&)>;
+  using OnDataCallback = std::function<void(const std::vector<uint8_t>&)>;
 
-  explicit RtpPacketSink(OnPacketCallback on_packet)
-      : _on_packet(on_packet) {}
+  // Конструктор тепер приймає режим роботи, payload_type для фільтрації та прапорець is_audio
+  explicit RtpPacketSink(OnDataCallback on_data, SinkMode mode, uint8_t payload_type, bool is_audio = false)
+      : _on_data(on_data), _mode(mode), _payload_type(payload_type), _is_audio(is_audio) {}
 
   ~RtpPacketSink() override = default;
 
-  // Цей метод тепер просто перенаправляє повний пакет
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override {
-    if (_on_packet) {
-      // ✅ ВИПРАВЛЕННЯ:
-      // Отримуємо вказівник на дані та їх розмір
+    // КЛЮЧОВЕ ВИПРАВЛЕННЯ: Ігноруємо пакети з неправильним типом (напр. RTX, FEC)
+    if (packet.PayloadType() != _payload_type) {
+      return;
+    }
+
+    if (_mode == SinkMode::RtpPacket) {
+      // РЕЖИМ 1: ПОВНІ RTP-ПАКЕТИ (тільки відфільтровані)
       const uint8_t* data = packet.data();
       size_t size = packet.size();
-
-      // Створюємо вектор, копіюючи дані з пам'яті за допомогою вказівника та розміру
       std::vector<uint8_t> full_packet(data, data + size);
-
-      _on_packet(full_packet);
+      if (_on_data) {
+        _on_data(full_packet);
+      }
+    } else { // _mode == SinkMode::CodecFrame
+      // РЕЖИМ 2: ЧИСТІ КАДРИ (PAYLOAD) (тільки з правильних пакетів)
+      if (_is_audio) {
+        // Для АУДІО: кожен пакет - це кадр
+        auto payload = packet.payload();
+        std::vector<uint8_t> frame(payload.begin(), payload.end());
+        if (_on_data) {
+          _on_data(frame);
+        }
+      } else {
+        // Для ВІДЕО: збираємо пакети в кадри
+        _frame_buffer.insert(_frame_buffer.end(), packet.payload().begin(), packet.payload().end());
+        if (packet.Marker()) {
+          if (_on_data) {
+            _on_data(_frame_buffer);
+          }
+          _frame_buffer.clear();
+        }
+      }
     }
   }
 
  private:
-  OnPacketCallback _on_packet;
+  OnDataCallback _on_data;
+  SinkMode _mode;
+  uint8_t _payload_type; // Зберігаємо потрібний Payload Type для фільтрації
+  bool _is_audio;
+  std::vector<uint8_t> _frame_buffer;
 };
 
 #endif  // SRC_RTPSINK_H_
