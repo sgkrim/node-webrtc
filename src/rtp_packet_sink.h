@@ -23,6 +23,12 @@ class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
   ~RtpPacketSink() override = default;
 
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override {
+
+
+    if (!_is_audio) {
+        RTC_LOG(LS_INFO) << "[RtpPacketSink] PRE-FILTER - Received packet with PT: " << (int)packet.PayloadType()
+                         << ", Expected PT: " << (int)_payload_type;
+    }
     // КЛЮЧОВЕ ВИПРАВЛЕННЯ: Ігноруємо пакети з неправильним типом (напр. RTX, FEC)
     if (packet.PayloadType() != _payload_type) {
       return;
