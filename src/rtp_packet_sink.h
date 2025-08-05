@@ -5,6 +5,7 @@
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
 #include <functional>
 #include <vector>
+#include <iostream>
 
 // Перерахування для вибору режиму роботи
 enum class SinkMode {
@@ -26,8 +27,8 @@ class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
 
 
     if (!_is_audio) {
-        RTC_LOG(LS_INFO) << "[RtpPacketSink] PRE-FILTER - Received packet with PT: " << (int)packet.PayloadType()
-                         << ", Expected PT: " << (int)_payload_type;
+        std::cout << "[RtpPacketSink] PRE-FILTER - Received packet with PT: " << (int)packet.PayloadType()
+                         << ", Expected PT: " << (int)_payload_type << std::endl;
     }
     // КЛЮЧОВЕ ВИПРАВЛЕННЯ: Ігноруємо пакети з неправильним типом (напр. RTX, FEC)
     if (packet.PayloadType() != _payload_type) {

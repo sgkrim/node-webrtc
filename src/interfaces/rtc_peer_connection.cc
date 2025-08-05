@@ -729,7 +729,7 @@ Napi::Value RTCPeerConnection::AttachRtpSink(const Napi::CallbackInfo& info) {
 
 // МЕТОД 2: ОТРИМАННЯ ЧИСТИХ КАДРІВ (сам знаходить PT)
 // ЗАМІНІТЬ ВАШ AttachFrameSink НА ЦЕЙ КОД
-Napi::Value RTCPeerConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
+Napi::Value RTCP_erConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
         Napi::TypeError::New(env, "attachFrameSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
@@ -738,7 +738,7 @@ Napi::Value RTCPeerConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    RTC_LOG(LS_INFO) << "[AttachFrameSink] Received request for trackId: " << trackId;
+    std::cout << "[AttachFrameSink] Received request for trackId: " << trackId << std::endl;
 
     Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(env, callback, "FrameCallback", 0, 1, [this, trackId](Napi::Env) { this->_tsfns.erase(trackId); });
     _tsfns[trackId] = tsfn;
@@ -761,7 +761,7 @@ Napi::Value RTCPeerConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
             if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
                 track_found_in_transceivers = true;
                 is_audio = (transceiver->receiver()->track()->kind() == webrtc::MediaStreamTrackInterface::kAudioKind);
-                codec_name = is_audio ? "opus" : "vp8"; // Поки що припускаємо vp8, пізніше розберемось
+                codec_name = is_audio ? "opus" : "vp8";
                 if (_payload_types.count(codec_name)) {
                     payload_type = _payload_types[codec_name];
                 }
@@ -769,14 +769,14 @@ Napi::Value RTCPeerConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
             }
         }
 
-        RTC_LOG(LS_INFO) << "[AttachFrameSink] Track lookup result: "
-                         << "found_in_transceivers=" << track_found_in_transceivers
-                         << ", is_audio=" << is_audio
-                         << ", codec_name='" << codec_name << "'"
-                         << ", payload_type=" << (int)payload_type;
+        std::cout << "[AttachFrameSink] Track lookup result: "
+                  << "found_in_transceivers=" << track_found_in_transceivers
+                  << ", is_audio=" << is_audio
+                  << ", codec_name='" << codec_name << "'"
+                  << ", payload_type=" << (int)payload_type << std::endl;
 
         if (!track_found_in_transceivers || payload_type == 0) {
-            RTC_LOG(LS_ERROR) << "[AttachFrameSink] FAILED: Could not find track or determine payload type for trackId: " << trackId;
+            std::cout << "[AttachFrameSink] FAILED: Could not find track or determine payload type for trackId: " << trackId << std::endl;
             return;
         }
 
@@ -784,17 +784,17 @@ Napi::Value RTCPeerConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
         RtpPacketSink* sink_ptr = sink.get();
         this->_sinks.push_back(std::move(sink));
 
-        RTC_LOG(LS_INFO) << "[AttachFrameSink] Sink created for trackId: " << trackId;
+        std::cout << "[AttachFrameSink] Sink created for trackId: " << trackId << std::endl;
 
         auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
         cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
 
         if (channel_iface) {
-            RTC_LOG(LS_INFO) << "[AttachFrameSink] Found cricket::Channel. Attaching sink for trackId: " << trackId;
+            std::cout << "[AttachFrameSink] Found cricket::Channel. Attaching sink for trackId: " << trackId << std::endl;
             channel_iface->SetRawRtpPacketSink(sink_ptr);
-            RTC_LOG(LS_INFO) << "[AttachFrameSink] Sink ATTACHED successfully for trackId: " << trackId;
+            std::cout << "[AttachFrameSink] Sink ATTACHED successfully for trackId: " << trackId << std::endl;
         } else {
-            RTC_LOG(LS_ERROR) << "[AttachFrameSink] FAILED: cricket::Channel not found for trackId: " << trackId;
+            std::cout << "[AttachFrameSink] FAILED: cricket::Channel not found for trackId: " << trackId << std::endl;
         }
     }));
     return env.Undefined();
