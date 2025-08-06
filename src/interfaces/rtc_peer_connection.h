@@ -17,6 +17,7 @@
 #include "src/dictionaries/node_webrtc/extended_rtc_configuration.h"
 #include "src/dictionaries/node_webrtc/rtc_session_description_init.h"
 #include "src/rtp_packet_sink.h"
+#include "src/encoded_frame_sink.h"
 
 namespace webrtc {
 
@@ -103,6 +104,7 @@ class RTCPeerConnection
 
   Napi::Value AttachRawSink(const Napi::CallbackInfo&);
   Napi::Value GetCustomMethodExists(const Napi::CallbackInfo& info);
+  Napi::Value AttachEncodedVideoSink(const Napi::CallbackInfo& info);
 
   Napi::Value GetCanTrickleIceCandidates(const Napi::CallbackInfo&);
   Napi::Value GetConnectionState(const Napi::CallbackInfo&);
@@ -119,6 +121,7 @@ class RTCPeerConnection
 
   RTCSessionDescriptionInit _lastSdp;
 
+  std::vector<std::unique_ptr<EncodedFrameSink>> _encoded_sinks;
   // Зберігаємо sink-и, щоб вони були живі, поки PeerConnection існує.
   std::vector<std::unique_ptr<RtpPacketSink>> _sinks;
   std::map<std::string, Napi::ThreadSafeFunction> _tsfns;
