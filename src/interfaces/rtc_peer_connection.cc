@@ -14,8 +14,6 @@
 
 // VVV ДОДАНО ВСІ НЕОБХІДНІ ЗАГОЛОВКИ VVV
 #include <iostream>
-#include <regex>      // <--- ДОДАЙТЕ ЦЕЙ
-#include <algorithm>  // <--- І ЦЕЙ
 
 #include <p2p/base/port_allocator.h>
 #include <api/sctp_transport_interface.h>
@@ -416,10 +414,6 @@ Napi::Value RTCPeerConnection::SetLocalDescription(const Napi::CallbackInfo& inf
   }
 
   auto observer = new rtc::RefCountedObject<SetSessionDescriptionObserver>(this, deferred);
-
-    // Parse Sdp for gets payload types
-   ParseSdpForPayloadTypes(descriptionInit.sdp);
-
   _jinglePeerConnection->SetLocalDescription(observer, description.release());
 
   return deferred.Promise();
@@ -440,12 +434,6 @@ Napi::Value RTCPeerConnection::SetRemoteDescription(const Napi::CallbackInfo& in
   }
 
   auto observer = new rtc::RefCountedObject<SetSessionDescriptionObserver>(this, deferred);
-
-  // Parse sdp payload types
-  std::string sdp_str;
-  description->ToString(&sdp_str);
-  ParseSdpForPayloadTypes(sdp_str);
-
   _jinglePeerConnection->SetRemoteDescription(observer, description.release());
 
   return deferred.Promise();  // NOLINT
@@ -692,163 +680,83 @@ class OnPacketWorker : public Napi::AsyncWorker {
 
 // Реалізація методу AttachRawSink
 
-Napi::Value RTCPeerConnection::AttachRtpSink(const Napi::CallbackInfo& info) {
+Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    if (info.Length() != 3 || !info[0].IsString() || !info[1].IsNumber() || !info[2].IsFunction()) {
-        Napi::TypeError::New(env, "attachRtpSink expects 3 arguments: (trackId, payloadType, callback)").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
-    std::string trackId = info[0].As<Napi::String>().Utf8Value();
-    uint8_t payloadType = info[1].As<Napi::Number>().Uint32Value();
-    Napi::Function callback = info[2].As<Napi::Function>();
 
-    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(env, callback, "RtpPacketCallback", 0, 1, [this, trackId](Napi::Env) { this->_tsfns.erase(trackId); });
-    _tsfns[trackId] = tsfn;
-
-    auto on_packet_callback = [tsfn](const std::vector<uint8_t>& packet) {
-        auto* packet_copy = new std::vector<uint8_t>(packet);
-        tsfn.NonBlockingCall(packet_copy, [](Napi::Env env, Napi::Function jsCallback, std::vector<uint8_t>* pkt) {
-            jsCallback.Call({Napi::Buffer<uint8_t>::Copy(env, pkt->data(), pkt->size())});
-            delete pkt;
-        });
-    };
-
-    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, payloadType, on_packet_callback]() {
-        auto sink = std::make_unique<RtpPacketSink>(on_packet_callback, SinkMode::RtpPacket, payloadType);
-        RtpPacketSink* sink_ptr = sink.get();
-        this->_sinks.push_back(std::move(sink));
-
-        auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
-        cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
-        if (channel_iface) {
-            channel_iface->SetRawRtpPacketSink(sink_ptr);
-        }
-    }));
-    return env.Undefined();
-}
-
-// МЕТОД 2: ОТРИМАННЯ ЧИСТИХ КАДРІВ (сам знаходить PT)
-// ЗАМІНІТЬ ВАШ AttachFrameSink НА ЦЕЙ КОД
-Napi::Value RTCPeerConnection::AttachFrameSink(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
     if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
-        Napi::TypeError::New(env, "attachFrameSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
+        Napi::TypeError::New(env, "attachRawSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
         return env.Undefined();
     }
+
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
-    std::cout << "[AttachFrameSink] Received request for trackId: " << trackId << std::endl;
+    std::cout << "v4. Starting record for trackId: " << trackId << std::endl;
 
-    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(env, callback, "FrameCallback", 0, 1, [this, trackId](Napi::Env) { this->_tsfns.erase(trackId); });
-    _tsfns[trackId] = tsfn;
+    struct FrameContext {
+      std::vector<uint8_t> frame_data;
+      uint32_t timestamp;
+    };
 
-    auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame) {
-        auto* frame_copy = new std::vector<uint8_t>(frame);
-        tsfn.NonBlockingCall(frame_copy, [](Napi::Env env, Napi::Function jsCallback, std::vector<uint8_t>* frm) {
-            jsCallback.Call({Napi::Buffer<uint8_t>::Copy(env, frm->data(), frm->size())});
-            delete frm;
+    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
+        env,
+        callback,
+        "RtpFrameCallback",
+        0,
+        1,
+        [trackId, this](Napi::Env) {
+          this->Dispatch(CreateCallback<RTCPeerConnection>([this, trackId]() {
+              this->_tsfns.erase(trackId);
+          }));
+        });
+
+    auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame, uint32_t timestamp) {
+        auto* context = new FrameContext();
+        context->frame_data = frame;
+        context->timestamp = timestamp;
+
+        tsfn.NonBlockingCall(context, [](Napi::Env env, Napi::Function jsCallback, FrameContext* ctx) {
+            Napi::HandleScope scope(env);
+            Napi::Object frame_obj = Napi::Object::New(env);
+            frame_obj.Set("payload", Napi::Buffer<uint8_t>::Copy(env, ctx->frame_data.data(), ctx->frame_data.size()));
+            frame_obj.Set("timestamp", Napi::Number::New(env, ctx->timestamp));
+            jsCallback.Call({frame_obj});
+            delete ctx;
         });
     };
 
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_frame_callback]() {
+        webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
+        if (!pc_interface) { return; }
+
         bool is_audio = false;
-        std::string codec_name;
-        uint8_t payload_type = 0;
-        bool track_found_in_transceivers = false;
-
-        for (const auto& transceiver : _jinglePeerConnection->GetTransceivers()) {
+        bool track_found = false;
+        for (const auto& transceiver : pc_interface->GetTransceivers()) {
             if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
-                track_found_in_transceivers = true;
-                if (is_audio) {
-                    codec_name = "opus";
-                } else {
-                    // Перевіряємо, який відеокодек є в нашому SDP
-                    if (_payload_types.count("h264")) {
-                        codec_name = "h264";
-                    } else if (_payload_types.count("vp8")) {
-                        codec_name = "vp8";
-                    }
-                }
-
-                if (!codec_name.empty() && _payload_types.count(codec_name)) {
-                    payload_type = _payload_types[codec_name];
-                }
+                is_audio = (transceiver->receiver()->track()->kind() == "audio");
+                track_found = true;
                 break;
             }
         }
 
-        std::cout << "[AttachFrameSink] Track lookup result: "
-                  << "found_in_transceivers=" << track_found_in_transceivers
-                  << ", is_audio=" << is_audio
-                  << ", codec_name='" << codec_name << "'"
-                  << ", payload_type=" << (int)payload_type << std::endl;
-
-        if (!track_found_in_transceivers || payload_type == 0) {
-            std::cout << "[AttachFrameSink] FAILED: Could not find track or determine payload type for trackId: " << trackId << std::endl;
+        if (!track_found) {
+            RTC_LOG(LS_WARNING) << "Track not found, cannot attach sink: " << trackId;
             return;
         }
 
-        auto sink = std::make_unique<RtpPacketSink>(on_frame_callback, SinkMode::CodecFrame, payload_type, is_audio);
+        auto sink = std::make_unique<RtpPacketSink>(on_frame_callback, is_audio);
         RtpPacketSink* sink_ptr = sink.get();
         this->_sinks.push_back(std::move(sink));
 
-        std::cout << "[AttachFrameSink] Sink created for trackId: " << trackId << std::endl;
-
-        auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
+        auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
         cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
-
         if (channel_iface) {
-            std::cout << "[AttachFrameSink] Found cricket::Channel. Attaching sink for trackId: " << trackId << std::endl;
             channel_iface->SetRawRtpPacketSink(sink_ptr);
-            std::cout << "[AttachFrameSink] Sink ATTACHED successfully for trackId: " << trackId << std::endl;
-        } else {
-            std::cout << "[AttachFrameSink] FAILED: cricket::Channel not found for trackId: " << trackId << std::endl;
         }
     }));
+
     return env.Undefined();
 }
-
-// End AttachRawSink
-
-// Start ParseSdp and GetPayloadTypes
-
-void RTCPeerConnection::ParseSdpForPayloadTypes(const std::string& sdp) {
-    _payload_types.clear();
-    // Регулярний вираз для пошуку рядків типу "a=rtpmap:111 opus/48000/2"
-    // Він знаходить числа, за якими йде "opus" або "vp8", ігноруючи регістр
-    // VVV Тепер шукаємо opus, VP8, АБО H264 VVV
-    std::regex rtpmap_regex("a=rtpmap:(\\d+)\\s+(opus|VP8|H264)\\/", std::regex_constants::icase);
-
-    std::istringstream sdp_stream(sdp);
-    std::string line;
-    while (std::getline(sdp_stream, line)) {
-        // Обрізаємо '\r' в кінці, якщо є
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        std::smatch match;
-        if (std::regex_search(line, match, rtpmap_regex) && match.size() == 3) {
-            uint8_t pt = static_cast<uint8_t>(std::stoi(match[1].str()));
-            std::string codec_name = match[2].str();
-            // Приводимо до нижнього регістру для уніфікації
-            std::transform(codec_name.begin(), codec_name.end(), codec_name.begin(),
-                           [](unsigned char c){ return std::tolower(c); });
-            _payload_types[codec_name] = pt;
-        }
-    }
-}
-
-Napi::Value RTCPeerConnection::GetPayloadTypes(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-    Napi::Object result = Napi::Object::New(env);
-    for (const auto& pair : _payload_types) {
-        result.Set(pair.first, Napi::Number::New(env, pair.second));
-    }
-    return result;
-}
-
-// End ParseSdp and GetPayloadTypes
 
 
 Napi::Value RTCPeerConnection::GetCanTrickleIceCandidates(const Napi::CallbackInfo& info) {
@@ -986,9 +894,7 @@ void RTCPeerConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("addIceCandidate", &RTCPeerConnection::AddIceCandidate),
     InstanceMethod("createDataChannel", &RTCPeerConnection::CreateDataChannel),
     InstanceMethod("close", &RTCPeerConnection::Close),
-    InstanceMethod("attachRtpSink", &RTCPeerConnection::AttachRtpSink),
-    InstanceMethod("attachFrameSink", &RTCPeerConnection::AttachFrameSink),
-    InstanceMethod("getPayloadTypes", &RTCPeerConnection::GetPayloadTypes),
+    InstanceMethod("attachRawSink", &RTCPeerConnection::AttachRawSink),
     InstanceAccessor("customMethodExists", &RTCPeerConnection::GetCustomMethodExists, nullptr),
     InstanceAccessor("canTrickleIceCandidates", &RTCPeerConnection::GetCanTrickleIceCandidates, nullptr),
     InstanceAccessor("connectionState", &RTCPeerConnection::GetConnectionState, nullptr),
