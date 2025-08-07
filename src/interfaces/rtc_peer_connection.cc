@@ -1011,6 +1011,64 @@ Napi::Value RTCPeerConnection::GetCustomMethodExists(const Napi::CallbackInfo& i
   return Napi::Boolean::New(info.Env(), true);
 }
 
+Napi::Value RTCPeerConnection::GetActiveCodecs(const Napi::CallbackInfo& info) {
+  auto env = info.Env();
+
+  if (!pc()) {
+    return env.Null();
+  }
+
+  auto transceivers = pc()->GetTransceivers();
+  auto result = Napi::Object::New(env);
+  auto video_result = Napi::Object::New(env);
+  auto audio_result = Napi::Object::New(env);
+
+  bool video_found = false;
+  bool audio_found = false;
+
+  for (const auto& transceiver : transceivers) {
+    auto maybe_direction = transceiver->current_direction();
+    if (!maybe_direction.has_value()) {
+      continue;
+    }
+
+    // ВИПРАВЛЕНО: Перевіряємо лише ті стани, які нам потрібні,
+    // і які гарантовано існують у старіших версіях API.
+    auto direction = *maybe_direction;
+    if (direction != webrtc::RtpTransceiverDirection::kSendRecv &&
+        direction != webrtc::RtpTransceiverDirection::kRecvOnly) {
+      continue;
+    }
+
+    auto media_type = transceiver->media_type();
+    auto params = transceiver->receiver()->GetParameters();
+
+    if (media_type == cricket::MEDIA_TYPE_VIDEO && !video_found && !params.codecs.empty()) {
+      video_result.Set("codec", Napi::String::New(env, params.codecs[0].name));
+
+      if (!params.encodings.empty() && params.encodings[0].max_framerate.has_value()) {
+        video_result.Set("framerate", Napi::Number::New(env, *params.encodings[0].max_framerate));
+      } else {
+        video_result.Set("framerate", env.Null());
+      }
+      video_found = true;
+    }
+
+    if (media_type == cricket::MEDIA_TYPE_AUDIO && !audio_found && !params.codecs.empty()) {
+      audio_result.Set("codec", Napi::String::New(env, params.codecs[0].name));
+      audio_found = true;
+    }
+
+    if (video_found && audio_found) {
+      break;
+    }
+  }
+
+  result.Set("video", video_result);
+  result.Set("audio", audio_result);
+
+  return result;
+}
 
 void RTCPeerConnection::SaveLastSdp(const RTCSessionDescriptionInit& lastSdp) {
   this->_lastSdp = lastSdp;
@@ -1039,6 +1097,8 @@ void RTCPeerConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("close", &RTCPeerConnection::Close),
     InstanceMethod("attachAudioSink", &RTCPeerConnection::AttachAudioSink),
     InstanceMethod("attachEncodedVideoSink", &RTCPeerConnection::AttachEncodedVideoSink),
+
+    InstanceMethod("getActiveCodecs", &RTCPeerConnection::GetActiveCodecs),
     //InstanceMethod("attachRawSink", &RTCPeerConnection::AttachRawSink),
     InstanceMethod("getPayloadTypes", &RTCPeerConnection::GetPayloadTypes),
     InstanceAccessor("customMethodExists", &RTCPeerConnection::GetCustomMethodExists, nullptr),

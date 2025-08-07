@@ -75,6 +75,8 @@ class RTCPeerConnection
 
  private:
   friend class RtpPacketSinkWrapper; // <--- ДОДАЙТЕ ЦЕЙ РЯДОК
+  Napi::Value GetActiveCodecs(const Napi::CallbackInfo&);
+
   Napi::Value AddTrack(const Napi::CallbackInfo&);
   Napi::Value AddTransceiver(const Napi::CallbackInfo&);
   Napi::Value RemoveTrack(const Napi::CallbackInfo&);

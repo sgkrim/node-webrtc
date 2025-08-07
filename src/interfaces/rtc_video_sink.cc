@@ -100,25 +100,40 @@ void RTCVideoSink::OnFrame(const webrtc::RecordableEncodedFrame& frame) {
     return;
   }
 
-  // Копіюємо дані, щоб безпечно передати їх в інший потік (на N-API)
+  // Копіюємо дані для безпечної передачі
   auto data_copy = new uint8_t[buffer->size()];
   memcpy(data_copy, buffer->data(), buffer->size());
 
-  Dispatch(CreateCallback<RTCVideoSink>([this, data_copy, size = buffer->size()]() {
+  // Зберігаємо метадані для передачі
+  auto size = buffer->size();
+  bool is_key_frame = frame.is_key_frame();
+  auto resolution = frame.resolution();
+
+  Dispatch(CreateCallback<RTCVideoSink>([this, data_copy, size, is_key_frame, resolution]() {
     auto env = Env();
     Napi::HandleScope scope(env);
 
-    // Створюємо Napi::Buffer з скопійованих даних.
-    // Лямбда-функція видалення `[](Napi::Env, uint8_t* data)` буде викликана автоматично,
-    // коли збирач сміття JS звільнить цей буфер.
+    // Створюємо Napi::Buffer
     auto napi_buffer = Napi::Buffer<uint8_t>::New(env, data_copy, size, [](Napi::Env, uint8_t* data) {
         delete[] data;
     });
 
-    auto object = Napi::Object::New(env);
-    object.Set("type", Napi::String::New(env, "encodedframe"));
-    object.Set("frame", napi_buffer);
-    MakeCallback("dispatchEvent", { object });
+    // Створюємо об'єкт з метаданими
+    auto event_data = Napi::Object::New(env);
+    event_data.Set("frame", napi_buffer);
+    event_data.Set("isKeyFrame", Napi::Boolean::New(env, is_key_frame));
+
+    auto res_obj = Napi::Object::New(env);
+    res_obj.Set("width", Napi::Number::New(env, resolution.width));
+    res_obj.Set("height", Napi::Number::New(env, resolution.height));
+    event_data.Set("resolution", res_obj);
+
+    // Створюємо фінальний об'єкт події
+    auto event_object = Napi::Object::New(env);
+    event_object.Set("type", Napi::String::New(env, "encodedframe"));
+    event_object.Set("data", event_data); // Вкладаємо наші дані в поле "data"
+
+    MakeCallback("dispatchEvent", { event_object });
   }));
 }
 
