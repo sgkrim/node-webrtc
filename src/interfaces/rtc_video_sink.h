@@ -11,6 +11,7 @@
 #include <api/media_stream_interface.h>
 #include <api/scoped_refptr.h>
 #include <api/video/video_sink_interface.h>
+#include <api/video/recordable_encoded_frame.h> // ДОДАНО
 
 #include "src/node/async_object_wrap_with_loop.h"
 
@@ -20,13 +21,19 @@ namespace node_webrtc {
 
 class RTCVideoSink
   : public AsyncObjectWrapWithLoop<RTCVideoSink>
-  , public rtc::VideoSinkInterface<webrtc::VideoFrame> {
+  , public rtc::VideoSinkInterface<webrtc::VideoFrame> // Існуюче спадкування
+  , public rtc::VideoSinkInterface<webrtc::RecordableEncodedFrame> // ДОДАНО: спадкування для закодованих кадрів
+{
  public:
   explicit RTCVideoSink(const Napi::CallbackInfo&);
 
   static void Init(Napi::Env, Napi::Object);
 
+  // Обробник для декодованих кадрів
   void OnFrame(const webrtc::VideoFrame& frame) override;
+
+  // ДОДАНО: Обробник для закодованих кадрів
+  void OnFrame(const webrtc::RecordableEncodedFrame& frame) override;
 
   static Napi::FunctionReference& constructor();
 

@@ -11,13 +11,14 @@
 #include <utility>
 
 #include <api/video/video_source_interface.h>
+#include <api/video/encoded_image.h> // Потрібно для EncodedImageBufferInterface
 
 #include "src/converters.h"
 #include "src/converters/arguments.h"
 #include "src/converters/napi.h"
-#include "src/dictionaries/webrtc/video_frame.h"  // IWYU pragma: keep
+#include "src/dictionaries/webrtc/video_frame.h"
 #include "src/functional/validation.h"
-#include "src/interfaces/media_stream_track.h"  // IWYU pragma: keep
+#include "src/interfaces/media_stream_track.h"
 #include "src/node/events.h"
 
 namespace node_webrtc {
@@ -37,8 +38,16 @@ RTCVideoSink::RTCVideoSink(const Napi::CallbackInfo& info)
 
   _track = std::move(track);
 
+  // 1. Реєструємося як слухач ДЕКОДОВАНИХ кадрів (як і раніше)
   rtc::VideoSinkWants wants;
-  _track->AddOrUpdateSink(this, wants);
+  // Використовуємо static_cast, щоб компілятор точно знав, яку версію інтерфейсу ми передаємо
+  _track->AddOrUpdateSink(static_cast<rtc::VideoSinkInterface<webrtc::VideoFrame>*>(this), wants);
+
+  // 2. ДОДАНО: Реєструємося як слухач ЗАКОДОВАНИХ кадрів
+  if (auto* source = _track->GetSource()) {
+    // Також використовуємо static_cast для уникнення неоднозначності
+    source->AddEncodedSink(static_cast<rtc::VideoSinkInterface<webrtc::RecordableEncodedFrame>*>(this));
+  }
 }
 
 Napi::Value RTCVideoSink::GetStopped(const Napi::CallbackInfo& info) {
@@ -49,7 +58,14 @@ Napi::Value RTCVideoSink::GetStopped(const Napi::CallbackInfo& info) {
 void RTCVideoSink::Stop() {
   if (_track) {
     _stopped = true;
-    _track->RemoveSink(this);
+
+    // 1. Відписуємося від ДЕКОДОВАНИХ кадрів
+    _track->RemoveSink(static_cast<rtc::VideoSinkInterface<webrtc::VideoFrame>*>(this));
+
+    // 2. ДОДАНО: Відписуємося від ЗАКОДОВАНИХ кадрів
+    if (auto* source = _track->GetSource()) {
+      source->RemoveEncodedSink(static_cast<rtc::VideoSinkInterface<webrtc::RecordableEncodedFrame>*>(this));
+    }
     _track = nullptr;
   }
   AsyncObjectWrapWithLoop<RTCVideoSink>::Stop();
@@ -60,6 +76,7 @@ Napi::Value RTCVideoSink::JsStop(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+// Цей метод для ДЕКОДОВАНИХ кадрів залишається без змін
 void RTCVideoSink::OnFrame(const webrtc::VideoFrame& frame) {
   Dispatch(CreateCallback<RTCVideoSink>([this, frame]() {
     auto env = Env();
@@ -72,6 +89,35 @@ void RTCVideoSink::OnFrame(const webrtc::VideoFrame& frame) {
     auto object = Napi::Object::New(env);
     object.Set("type", Napi::String::New(env, "frame"));
     object.Set("frame", maybeValue.UnsafeFromValid());
+    MakeCallback("dispatchEvent", { object });
+  }));
+}
+
+// ДОДАНО: Новий метод для ЗАКОДОВАНИХ кадрів
+void RTCVideoSink::OnFrame(const webrtc::RecordableEncodedFrame& frame) {
+  auto buffer = frame.encoded_buffer();
+  if (!buffer || buffer->size() == 0) {
+    return;
+  }
+
+  // Копіюємо дані, щоб безпечно передати їх в інший потік (на N-API)
+  auto data_copy = new uint8_t[buffer->size()];
+  memcpy(data_copy, buffer->data(), buffer->size());
+
+  Dispatch(CreateCallback<RTCVideoSink>([this, data_copy, size = buffer->size()]() {
+    auto env = Env();
+    Napi::HandleScope scope(env);
+
+    // Створюємо Napi::Buffer з скопійованих даних.
+    // Лямбда-функція видалення `[](Napi::Env, uint8_t* data)` буде викликана автоматично,
+    // коли збирач сміття JS звільнить цей буфер.
+    auto napi_buffer = Napi::Buffer<uint8_t>::New(env, data_copy, size, [](Napi::Env, uint8_t* data) {
+        delete[] data;
+    });
+
+    auto object = Napi::Object::New(env);
+    object.Set("type", Napi::String::New(env, "encodedframe"));
+    object.Set("frame", napi_buffer);
     MakeCallback("dispatchEvent", { object });
   }));
 }
