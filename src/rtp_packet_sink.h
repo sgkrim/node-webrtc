@@ -8,14 +8,17 @@
 
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
  public:
+  // Колбек приймає лише один аргумент - буфер з даними
   using OnFrameCallback = std::function<void(const std::vector<uint8_t>&)>;
 
-  explicit RtpPacketSink(OnFrameCallback on_frame) : _on_frame(on_frame) {}
+  // Конструктор приймає колбек і payload_type для фільтрації
+  explicit RtpPacketSink(OnFrameCallback on_frame, uint8_t payload_type)
+      : _on_frame(on_frame), _payload_type(payload_type) {}
+
   ~RtpPacketSink() override = default;
 
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override {
-
-    if((int)packet.PayloadType() != 111){
+    if (packet.PayloadType() != _payload_type) {
         return;
     }
 
@@ -28,5 +31,6 @@ class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
 
  private:
   OnFrameCallback _on_frame;
+  uint8_t _payload_type;
 };
 #endif

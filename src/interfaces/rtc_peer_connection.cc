@@ -7,6 +7,7 @@
  */
 #include "src/interfaces/rtc_peer_connection.h"
 
+#include <regex>
 #include <iosfwd>
 #include <memory>
 #include <utility>
@@ -679,93 +680,132 @@ class OnPacketWorker : public Napi::AsyncWorker {
   RtpPacketData* _data;
 };
 
+
+
+void RTCPeerConnection::ParseSdpForPayloadTypes(const std::string& sdp) {
+    // ЛОГ 1: Перевіряємо, чи метод взагалі викликається і що він отримує
+    std::cout << "[[[ C++ PARSER STARTED ]]] Received SDP to parse. Length: " << sdp.length() << std::endl;
+
+    _payload_types.clear();
+    std::regex rtpmap_regex("a=rtpmap:(\\d+)\\s+(opus|VP8|H264)\\/", std::regex_constants::icase);
+
+    std::istringstream sdp_stream(sdp);
+    std::string line;
+    while (std::getline(sdp_stream, line)) {
+        if (!line.empty() && line.back() == '\r') { line.pop_back(); }
+        std::smatch match;
+        if (std::regex_search(line, match, rtpmap_regex) && match.size() == 3) {
+            std::string codec_name_found = match[2].str();
+            // ЛОГ 2: Перевіряємо, чи працює регулярний вираз
+            std::cout << "[[[ C++ PARSER ]]] --- MATCH FOUND! --- Codec: " << codec_name_found << ", PT: " << match[1].str() << std::endl;
+
+            uint8_t pt = static_cast<uint8_t>(std::stoi(match[1].str()));
+            std::string codec_name_lower = codec_name_found;
+            std::transform(codec_name_lower.begin(), codec_name_lower.end(), codec_name_lower.begin(),
+                           [](unsigned char c){ return std::tolower(c); });
+            _payload_types[codec_name_lower] = pt;
+        }
+    }
+    // ЛОГ 3: Перевіряємо, скільки кодеків було знайдено в результаті
+    std::cout << "[[[ C++ PARSER FINISHED ]]] Found " << _payload_types.size() << " codecs." << std::endl;
+}
+
+Napi::Value RTCPeerConnection::GetPayloadTypes(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::Object result = Napi::Object::New(env);
+    for (const auto& pair : _payload_types) {
+        result.Set(pair.first, Napi::Number::New(env, pair.second));
+    }
+    return result;
+}
+
+
+
+
 // Реалізація методу AttachRawSink
 
-Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
-    Napi::Env env = info.Env();
-
-    if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
-        Napi::TypeError::New(env, "attachRawSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
-
-    std::string trackId = info[0].As<Napi::String>().Utf8Value();
-    Napi::Function callback = info[1].As<Napi::Function>();
-
-    std::cout << "v4. Starting record for trackId: " << trackId << std::endl;
-
-    struct FrameContext {
-      std::vector<uint8_t> frame_data;
-      uint32_t timestamp;
-    };
-
-    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
-        env,
-        callback,
-        "RtpFrameCallback",
-        0,
-        1,
-        [trackId, this](Napi::Env) {
-          this->Dispatch(CreateCallback<RTCPeerConnection>([this, trackId]() {
-              this->_tsfns.erase(trackId);
-          }));
-        });
-
-    auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame, uint32_t timestamp) {
-        auto* context = new FrameContext();
-        context->frame_data = frame;
-        context->timestamp = timestamp;
-
-        tsfn.NonBlockingCall(context, [](Napi::Env env, Napi::Function jsCallback, FrameContext* ctx) {
-            Napi::HandleScope scope(env);
-            Napi::Object frame_obj = Napi::Object::New(env);
-            frame_obj.Set("payload", Napi::Buffer<uint8_t>::Copy(env, ctx->frame_data.data(), ctx->frame_data.size()));
-            frame_obj.Set("timestamp", Napi::Number::New(env, ctx->timestamp));
-            jsCallback.Call({frame_obj});
-            delete ctx;
-        });
-    };
-
-    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_frame_callback]() {
-        webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
-        if (!pc_interface) { return; }
-
-        bool is_audio = false;
-        bool track_found = false;
-        for (const auto& transceiver : pc_interface->GetTransceivers()) {
-            if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
-                is_audio = (transceiver->receiver()->track()->kind() == "audio");
-                track_found = true;
-                break;
-            }
-        }
-
-        if (!track_found) {
-            RTC_LOG(LS_WARNING) << "Track not found, cannot attach sink: " << trackId;
-            return;
-        }
-
-        auto sink = std::make_unique<RtpPacketSink>(on_frame_callback, is_audio);
-        RtpPacketSink* sink_ptr = sink.get();
-        this->_sinks.push_back(std::move(sink));
-
-        auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
-        cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
-        if (channel_iface) {
-            channel_iface->SetRawRtpPacketSink(sink_ptr);
-        }
-    }));
-
-    return env.Undefined();
-}
+//Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
+//    Napi::Env env = info.Env();
+//
+//    if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
+//        Napi::TypeError::New(env, "attachRawSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
+//        return env.Undefined();
+//    }
+//
+//    std::string trackId = info[0].As<Napi::String>().Utf8Value();
+//    Napi::Function callback = info[1].As<Napi::Function>();
+//
+//    std::cout << "v4. Starting record for trackId: " << trackId << std::endl;
+//
+//    struct FrameContext {
+//      std::vector<uint8_t> frame_data;
+//      uint32_t timestamp;
+//    };
+//
+//    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
+//        env,
+//        callback,
+//        "RtpFrameCallback",
+//        0,
+//        1,
+//        [trackId, this](Napi::Env) {
+//          this->Dispatch(CreateCallback<RTCPeerConnection>([this, trackId]() {
+//              this->_tsfns.erase(trackId);
+//          }));
+//        });
+//
+//    auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame, uint32_t timestamp) {
+//        auto* context = new FrameContext();
+//        context->frame_data = frame;
+//        context->timestamp = timestamp;
+//
+//        tsfn.NonBlockingCall(context, [](Napi::Env env, Napi::Function jsCallback, FrameContext* ctx) {
+//            Napi::HandleScope scope(env);
+//            Napi::Object frame_obj = Napi::Object::New(env);
+//            frame_obj.Set("payload", Napi::Buffer<uint8_t>::Copy(env, ctx->frame_data.data(), ctx->frame_data.size()));
+//            frame_obj.Set("timestamp", Napi::Number::New(env, ctx->timestamp));
+//            jsCallback.Call({frame_obj});
+//            delete ctx;
+//        });
+//    };
+//
+//    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_frame_callback]() {
+//        webrtc::PeerConnectionInterface* pc_interface = _jinglePeerConnection.get();
+//        if (!pc_interface) { return; }
+//
+//        bool is_audio = false;
+//        bool track_found = false;
+//        for (const auto& transceiver : pc_interface->GetTransceivers()) {
+//            if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
+//                is_audio = (transceiver->receiver()->track()->kind() == "audio");
+//                track_found = true;
+//                break;
+//            }
+//        }
+//
+//        if (!track_found) {
+//            RTC_LOG(LS_WARNING) << "Track not found, cannot attach sink: " << trackId;
+//            return;
+//        }
+//
+//        auto sink = std::make_unique<RtpPacketSink>(on_frame_callback, is_audio);
+//        RtpPacketSink* sink_ptr = sink.get();
+//        this->_sinks.push_back(std::move(sink));
+//
+//        auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc_interface);
+//        cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
+//        if (channel_iface) {
+//            channel_iface->SetRawRtpPacketSink(sink_ptr);
+//        }
+//    }));
+//
+//    return env.Undefined();
+//}
 
 // Record Audio
 Napi::Value RTCPeerConnection::AttachAudioSink(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
-        Napi::TypeError::New(env, "AttachAudioSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
-        return env.Undefined();
-    }
+    if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) { /* ... error ... */ }
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
@@ -781,12 +821,20 @@ Napi::Value RTCPeerConnection::AttachAudioSink(const Napi::CallbackInfo& info) {
     };
 
     Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_frame_callback]() {
-        auto sink = std::make_unique<RtpPacketSink>(on_frame_callback);
+        uint8_t opus_payload_type = 0;
+        if (_payload_types.count("opus")) {
+            opus_payload_type = _payload_types["opus"];
+        }
+        if (opus_payload_type == 0) { return; }
+
+        auto sink = std::make_unique<RtpPacketSink>(on_frame_callback, opus_payload_type);
+        RtpPacketSink* sink_ptr = sink.get();
         this->_sinks.push_back(std::move(sink));
+
         auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
         cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
         if (channel_iface) {
-            channel_iface->SetRawRtpPacketSink(this->_sinks.back().get());
+            channel_iface->SetRawRtpPacketSink(sink_ptr);
         }
     }));
     return env.Undefined();
@@ -978,7 +1026,8 @@ void RTCPeerConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("close", &RTCPeerConnection::Close),
     InstanceMethod("attachAudioSink", &RTCPeerConnection::AttachAudioSink),
     InstanceMethod("attachEncodedVideoSink", &RTCPeerConnection::AttachEncodedVideoSink),
-    InstanceMethod("attachRawSink", &RTCPeerConnection::AttachRawSink),
+    //InstanceMethod("attachRawSink", &RTCPeerConnection::AttachRawSink),
+    InstanceMethod("getPayloadTypes", &RTCPeerConnection::GetPayloadTypes),
     InstanceAccessor("customMethodExists", &RTCPeerConnection::GetCustomMethodExists, nullptr),
     InstanceAccessor("canTrickleIceCandidates", &RTCPeerConnection::GetCanTrickleIceCandidates, nullptr),
     InstanceAccessor("connectionState", &RTCPeerConnection::GetConnectionState, nullptr),

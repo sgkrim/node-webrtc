@@ -123,6 +123,13 @@ class RTCPeerConnection
 
   RTCSessionDescriptionInit _lastSdp;
 
+  // МЕТОД ДЛЯ ОТРИМАННЯ PAYLOAD TYPES
+  Napi::Value GetPayloadTypes(const Napi::CallbackInfo&);
+
+  // ЛОГІКА ДЛЯ SDP
+  void ParseSdpForPayloadTypes(const std::string& sdp);
+  std::map<std::string, uint8_t> _payload_types;
+
   std::vector<std::unique_ptr<EncodedFrameSink>> _encoded_sinks;
   // Зберігаємо sink-и, щоб вони були живі, поки PeerConnection існує.
   std::vector<std::unique_ptr<RtpPacketSink>> _sinks;
