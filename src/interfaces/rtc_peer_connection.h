@@ -104,6 +104,8 @@ class RTCPeerConnection
 
   Napi::Value AttachRawSink(const Napi::CallbackInfo&);
   Napi::Value GetCustomMethodExists(const Napi::CallbackInfo& info);
+
+  Napi::Value AttachAudioSink(const Napi::CallbackInfo& info);
   Napi::Value AttachEncodedVideoSink(const Napi::CallbackInfo& info);
 
   Napi::Value GetCanTrickleIceCandidates(const Napi::CallbackInfo&);

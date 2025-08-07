@@ -5,53 +5,28 @@
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
 #include <functional>
 #include <vector>
-#include <iostream>
 
 class RtpPacketSink : public webrtc::RtpPacketSinkInterface {
  public:
-  // Колбек тепер буде викликатись з повним кадром, а не з пакетом
-  using OnFrameCallback = std::function<void(const std::vector<uint8_t>&, uint32_t)>;
+  using OnFrameCallback = std::function<void(const std::vector<uint8_t>&)>;
 
-  // ЗМІНЕНО: Додаємо прапорець is_audio в конструктор
-  explicit RtpPacketSink(OnFrameCallback on_frame, bool is_audio)
-      : _on_frame(on_frame), _is_audio(is_audio) {}
-
+  explicit RtpPacketSink(OnFrameCallback on_frame) : _on_frame(on_frame) {}
   ~RtpPacketSink() override = default;
 
-  // Цей метод тепер має різну логіку для аудіо та відео
   void OnRtpPacket(const webrtc::RtpPacketReceived& packet) override {
 
-    auto mediaType = "video";
-    if(_is_audio){
-        mediaType = "audio";
+    if((int)packet.PayloadType() != 111){
+        return;
     }
 
-  std::cout << "[RtpPacketSink] " << mediaType << "  PRE-FILTER - Received packet with PT: " << (int)packet.PayloadType()
-                           << std::endl;
-
-    if (_is_audio) {
-      // Для АУДІО: кожен пакет - це кадр. Віддаємо одразу корисне навантаження.
-      auto payload = packet.payload();
-      std::vector<uint8_t> frame(payload.begin(), payload.end());
-      if (_on_frame) {
-        _on_frame(frame, packet.Timestamp());
-      }
-    } else {
-      // Для ВІДЕО: збираємо пакети в кадри за маркерним бітом.
-      _frame_buffer.insert(_frame_buffer.end(), packet.payload().begin(), packet.payload().end());
-      if (packet.Marker()) {
-        if (_on_frame) {
-          _on_frame(_frame_buffer, packet.Timestamp());
-        }
-        _frame_buffer.clear();
-      }
+    auto payload = packet.payload();
+    std::vector<uint8_t> frame(payload.begin(), payload.end());
+    if (_on_frame) {
+      _on_frame(frame);
     }
   }
 
  private:
   OnFrameCallback _on_frame;
-  bool _is_audio; // Прапорець для визначення типу потоку
-  std::vector<uint8_t> _frame_buffer;
 };
-
-#endif  // SRC_RTPSINK_H_
+#endif

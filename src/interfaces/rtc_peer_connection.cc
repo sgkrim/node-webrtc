@@ -759,6 +759,40 @@ Napi::Value RTCPeerConnection::AttachRawSink(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
+// Record Audio
+Napi::Value RTCPeerConnection::AttachAudioSink(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
+        Napi::TypeError::New(env, "AttachAudioSink expects 2 arguments: (trackId, callback)").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    std::string trackId = info[0].As<Napi::String>().Utf8Value();
+    Napi::Function callback = info[1].As<Napi::Function>();
+
+    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(env, callback, "AudioFrameCallback", 0, 1, [this, trackId](Napi::Env) { this->_tsfns.erase(trackId); });
+    _tsfns[trackId] = tsfn;
+
+    auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame) {
+        auto* frame_copy = new std::vector<uint8_t>(frame);
+        tsfn.NonBlockingCall(frame_copy, [](Napi::Env env, Napi::Function jsCallback, std::vector<uint8_t>* frm) {
+            jsCallback.Call({Napi::Buffer<uint8_t>::Copy(env, frm->data(), frm->size())});
+            delete frm;
+        });
+    };
+
+    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_frame_callback]() {
+        auto sink = std::make_unique<RtpPacketSink>(on_frame_callback);
+        this->_sinks.push_back(std::move(sink));
+        auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
+        cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
+        if (channel_iface) {
+            channel_iface->SetRawRtpPacketSink(this->_sinks.back().get());
+        }
+    }));
+    return env.Undefined();
+}
+
+//Record Video
 Napi::Value RTCPeerConnection::AttachEncodedVideoSink(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() != 2 || !info[0].IsString() || !info[1].IsFunction()) {
@@ -771,66 +805,40 @@ Napi::Value RTCPeerConnection::AttachEncodedVideoSink(const Napi::CallbackInfo& 
     std::cout << "[AttachEncodedVideoSink] Received request for trackId: " << trackId << std::endl;
 
     Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(env, callback, "EncodedVideoFrameCallback", 0, 1, [this, trackId](Napi::Env) { this->_tsfns.erase(trackId); });
-    _tsfns[trackId] = tsfn;
+        _tsfns[trackId] = tsfn;
 
-    // VVV КЛЮЧОВЕ ВИПРАВЛЕННЯ VVV
-    // Створюємо колбек з правильною сигнатурою, якої очікує SetRecordableEncodedFrameCallback
-    auto on_encoded_frame_callback = [tsfn](const webrtc::RecordableEncodedFrame& frame) {
-        // Всю логіку витягування даних переносимо сюди
-        rtc::scoped_refptr<const webrtc::EncodedImageBufferInterface> buffer = frame.encoded_buffer();
+        auto on_encoded_frame_callback = [tsfn](const webrtc::RecordableEncodedFrame& frame) {
+            rtc::scoped_refptr<const webrtc::EncodedImageBufferInterface> buffer = frame.encoded_buffer();
+            auto* frame_copy = new std::vector<uint8_t>(buffer->data(), buffer->data() + buffer->size());
+            tsfn.NonBlockingCall(frame_copy, [](Napi::Env env, Napi::Function jsCallback, std::vector<uint8_t>* frm) {
+                jsCallback.Call({Napi::Buffer<uint8_t>::Copy(env, frm->data(), frm->size())});
+                delete frm;
+            });
+        };
 
-        // Створюємо копію даних для передачі в інший потік
-        auto* frame_copy = new std::vector<uint8_t>(buffer->data(), buffer->data() + buffer->size());
-
-        // Викликаємо JS-колбек через ThreadSafeFunction
-        tsfn.NonBlockingCall(frame_copy, [](Napi::Env env, Napi::Function jsCallback, std::vector<uint8_t>* frm) {
-            jsCallback.Call({Napi::Buffer<uint8_t>::Copy(env, frm->data(), frm->size())});
-            delete frm;
-        });
-    };
-    // ^^^ КІНЕЦЬ КЛЮЧОВОГО ВИПРАВЛЕННЯ ^^^
-
-    Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_encoded_frame_callback]() {
-        uint32_t ssrc = 0;
-        // 1. Знаходимо SSRC за trackId
-        for (const auto& transceiver : _jinglePeerConnection->GetTransceivers()) {
-            if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
-                auto params = transceiver->receiver()->GetParameters();
-                if (!params.encodings.empty()) {
-                    ssrc = params.encodings[0].ssrc.value_or(0);
+        Dispatch(CreateCallback<RTCPeerConnection>([this, trackId, on_encoded_frame_callback]() {
+            uint32_t ssrc = 0;
+            for (const auto& transceiver : _jinglePeerConnection->GetTransceivers()) {
+                if (transceiver && transceiver->receiver() && transceiver->receiver()->track() && transceiver->receiver()->track()->id() == trackId) {
+                    auto params = transceiver->receiver()->GetParameters();
+                    if (!params.encodings.empty()) { ssrc = params.encodings[0].ssrc.value_or(0); }
+                    break;
                 }
-                break;
             }
-        }
+            if (ssrc == 0) { return; }
 
-        if (ssrc == 0) {
-            std::cout << "[AttachEncodedVideoSink] FAILED: Could not find SSRC for trackId: " << trackId << std::endl;
-            return;
-        }
+            auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
+            cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
+            if (!channel_iface) { return; }
 
-        std::cout << "[AttachEncodedVideoSink] Found SSRC " << ssrc << " for trackId " << trackId << std::endl;
+            cricket::VideoChannel* video_channel = static_cast<cricket::VideoChannel*>(channel_iface);
+            cricket::VideoMediaChannel* media_channel = video_channel->media_channel();
+            if (!media_channel) { return; }
 
-        // 2. Отримуємо VideoChannel, потім VideoMediaChannel
-        auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
-        cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
-        if (!channel_iface) {
-            std::cout << "[AttachEncodedVideoSink] FAILED: GetChannelByTrackId returned null for track: " << trackId << std::endl;
-            return;
-        }
-        cricket::VideoChannel* video_channel = static_cast<cricket::VideoChannel*>(channel_iface);
-        cricket::VideoMediaChannel* media_channel = video_channel->media_channel();
-        if (!media_channel) {
-            std::cout << "[AttachEncodedVideoSink] FAILED: Could not get VideoMediaChannel" << std::endl;
-            return;
-        }
-
-        // 3. Приєднуємо наш колбек!
-        media_channel->SetRecordableEncodedFrameCallback(ssrc, on_encoded_frame_callback);
-
-        std::cout << "[AttachEncodedVideoSink] SetRecordableEncodedFrameCallback called successfully for SSRC: " << ssrc << std::endl;
-    }));
-
-    return env.Undefined();
+            media_channel->SetRecordableEncodedFrameCallback(ssrc, on_encoded_frame_callback);
+            std::cout << "[AttachEncodedVideoSink] Sink ATTACHED successfully for SSRC: " << ssrc << std::endl;
+        }));
+        return env.Undefined();
 }
 
 Napi::Value RTCPeerConnection::GetCanTrickleIceCandidates(const Napi::CallbackInfo& info) {
@@ -968,6 +976,7 @@ void RTCPeerConnection::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod("addIceCandidate", &RTCPeerConnection::AddIceCandidate),
     InstanceMethod("createDataChannel", &RTCPeerConnection::CreateDataChannel),
     InstanceMethod("close", &RTCPeerConnection::Close),
+    InstanceMethod("attachAudioSink", &RTCPeerConnection::AttachAudioSink),
     InstanceMethod("attachEncodedVideoSink", &RTCPeerConnection::AttachEncodedVideoSink),
     InstanceMethod("attachRawSink", &RTCPeerConnection::AttachRawSink),
     InstanceAccessor("customMethodExists", &RTCPeerConnection::GetCustomMethodExists, nullptr),
