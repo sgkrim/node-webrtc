@@ -405,6 +405,13 @@ Napi::Value RTCPeerConnection::SetLocalDescription(const Napi::CallbackInfo& inf
     Reject(deferred, maybeRawDescription.ToErrors()[0]);
     return deferred.Promise();
   }
+
+  // VVV ПЕРЕВІРТЕ, ЧИ Є У ВАС ЦЕЙ РЯДОК VVV
+  // Ми використовуємо descriptionInit.sdp, оскільки він містить рядок SDP
+  ParseSdpForPayloadTypes(descriptionInit.sdp);
+  // ^^^ КІНЕЦЬ ПЕРЕВІРКИ ^^^
+
+
   auto rawDescription = maybeRawDescription.UnsafeFromValid();
   std::unique_ptr<webrtc::SessionDescriptionInterface> description(rawDescription);
 
@@ -434,6 +441,12 @@ Napi::Value RTCPeerConnection::SetRemoteDescription(const Napi::CallbackInfo& in
             "The RTCPeerConnection's signalingState is 'closed'."));
     return deferred.Promise();
   }
+
+  // VVV ПЕРЕВІРТЕ, ЧИ Є У ВАС ЦІ РЯДКИ VVV
+  std::string sdp_str;
+  description->ToString(&sdp_str);
+  ParseSdpForPayloadTypes(sdp_str);
+  // ^^^ КІНЕЦЬ ПЕРЕВІРКИ ^^^
 
   auto observer = new rtc::RefCountedObject<SetSessionDescriptionObserver>(this, deferred);
   _jinglePeerConnection->SetRemoteDescription(observer, description.release());
