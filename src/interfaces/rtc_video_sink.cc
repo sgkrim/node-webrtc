@@ -108,30 +108,29 @@ void RTCVideoSink::OnFrame(const webrtc::RecordableEncodedFrame& frame) {
   auto size = buffer->size();
   bool is_key_frame = frame.is_key_frame();
   auto resolution = frame.resolution();
+  int64_t timestamp_us = frame.render_time().us(); // <--- ДОДАНО: Отримуємо мітку в мікросекундах
 
-  Dispatch(CreateCallback<RTCVideoSink>([this, data_copy, size, is_key_frame, resolution]() {
+  Dispatch(CreateCallback<RTCVideoSink>([this, data_copy, size, is_key_frame, resolution, timestamp_us]() { // <--- ДОДАНО: передаємо timestamp_us
     auto env = Env();
     Napi::HandleScope scope(env);
 
-    // Створюємо Napi::Buffer
     auto napi_buffer = Napi::Buffer<uint8_t>::New(env, data_copy, size, [](Napi::Env, uint8_t* data) {
         delete[] data;
     });
 
-    // Створюємо об'єкт з метаданими
     auto event_data = Napi::Object::New(env);
     event_data.Set("frame", napi_buffer);
     event_data.Set("isKeyFrame", Napi::Boolean::New(env, is_key_frame));
+    event_data.Set("timestampUs", Napi::Number::New(env, timestamp_us)); // <--- ДОДАНО: Додаємо мітку в об'єкт
 
     auto res_obj = Napi::Object::New(env);
     res_obj.Set("width", Napi::Number::New(env, resolution.width));
     res_obj.Set("height", Napi::Number::New(env, resolution.height));
     event_data.Set("resolution", res_obj);
 
-    // Створюємо фінальний об'єкт події
     auto event_object = Napi::Object::New(env);
     event_object.Set("type", Napi::String::New(env, "encodedframe"));
-    event_object.Set("data", event_data); // Вкладаємо наші дані в поле "data"
+    event_object.Set("data", event_data);
 
     MakeCallback("dispatchEvent", { event_object });
   }));

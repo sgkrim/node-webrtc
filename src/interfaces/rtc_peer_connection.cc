@@ -815,6 +815,11 @@ Napi::Value RTCPeerConnection::GetPayloadTypes(const Napi::CallbackInfo& info) {
 //    return env.Undefined();
 //}
 
+struct AudioFrameData {
+  std::vector<uint8_t> frame;
+  uint32_t timestamp;
+};
+
 // Record Audio
 Napi::Value RTCPeerConnection::AttachAudioSink(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
@@ -822,14 +827,22 @@ Napi::Value RTCPeerConnection::AttachAudioSink(const Napi::CallbackInfo& info) {
     std::string trackId = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
+    // ОНОВЛЕНО: ThreadSafeFunction тепер буде приймати вказівник на нашу структуру
     Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(env, callback, "AudioFrameCallback", 0, 1, [this, trackId](Napi::Env) { this->_tsfns.erase(trackId); });
     _tsfns[trackId] = tsfn;
 
-    auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame) {
-        auto* frame_copy = new std::vector<uint8_t>(frame);
-        tsfn.NonBlockingCall(frame_copy, [](Napi::Env env, Napi::Function jsCallback, std::vector<uint8_t>* frm) {
-            jsCallback.Call({Napi::Buffer<uint8_t>::Copy(env, frm->data(), frm->size())});
-            delete frm;
+    // ОНОВЛЕНО: Сигнатура лямбди тепер приймає два аргументи
+    auto on_frame_callback = [tsfn](const std::vector<uint8_t>& frame, uint32_t rtp_timestamp) {
+        // Створюємо структуру для передачі в інший потік
+        auto* data_to_pass = new AudioFrameData{frame, rtp_timestamp};
+        tsfn.NonBlockingCall(data_to_pass, [](Napi::Env env, Napi::Function jsCallback, AudioFrameData* data) {
+            // В JS створюємо об'єкт з буфером та міткою
+            auto event_data = Napi::Object::New(env);
+            event_data.Set("frame", Napi::Buffer<uint8_t>::Copy(env, data->frame.data(), data->frame.size()));
+            event_data.Set("rtpTimestamp", Napi::Number::New(env, data->timestamp));
+
+            jsCallback.Call({event_data});
+            delete data;
         });
     };
 
@@ -844,7 +857,7 @@ Napi::Value RTCPeerConnection::AttachAudioSink(const Napi::CallbackInfo& info) {
         RtpPacketSink* sink_ptr = sink.get();
         this->_sinks.push_back(std::move(sink));
 
-        auto* pc_impl = static_cast<webrtc::PeerConnection*>(_jinglePeerConnection.get());
+        auto* pc_impl = static_cast<webrtc::PeerConnection*>(pc()); // Використовуємо pc()
         cricket::ChannelInterface* channel_iface = pc_impl->GetChannelByTrackId(trackId);
         if (channel_iface) {
             channel_iface->SetRawRtpPacketSink(sink_ptr);
