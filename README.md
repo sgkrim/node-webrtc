@@ -9,7 +9,7 @@ Added native recording stream. Use new methods recording from peerConnection as 
 
 Example:
 
-```
+```javascript
 recordVideoNative(videoTrack, audioTrack) {
         const { RTCVideoSink } = this.webrtc.nonstandard;
         const payloadTypes = this.peerConnection.getPayloadTypes();
